@@ -1,13 +1,916 @@
-body {
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+* {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5a6fd8, #6a42a0);
+}
+
+/* Glass effect más sólido */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.hover-lift {
+  transition: all 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Inputs con mejor contraste */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  ring: 2px !important;
+  ring-color: #7c3aed !important;
+  border-color: #7c3aed !important;
+  background: white !important;
+}
+
+/* Botones con efectos */
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  transition: all 0.3s ease;
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a42a0 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  transition: all 0.3s ease;
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, #0d9488 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transition: all 0.3s ease;
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+/* Cards más sólidas */
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* Sidebar */
+.sidebar {
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Calendario mejorado */
+.calendar-container {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+}
+
+.calendar-header {
+  background: #f8fafc;
+  padding: 12px;
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.calendar-day {
+  min-height: 120px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.calendar-day:hover {
+  background: #f9fafb;
+}
+
+.calendar-day.other-month {
+  background: #f8fafc;
+  color: #9ca3af;
+}
+
+.calendar-day.today {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+.calendar-day.today:hover {
+  background: linear-gradient(135deg, #5a6fd8, #6a42a0);
+}
+
+.calendar-day.has-sessions {
+  border-left: 4px solid #10b981;
+}
+
+.calendar-day.has-pending {
+  border-left: 4px solid #f59e0b;
+  animation: pulse 2s infinite;
+}
+
+.day-number {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.day-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.session-mini {
+  background: #3b82f6;
+  color: white;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.session-mini:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.session-mini.pending {
+  animation: pulse 1.5s infinite;
+}
+
+.session-more {
+  font-size: 10px;
+  color: #6b7280;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* Modales mejorados */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+}
+
+/* Notificaciones */
+.notification {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  animation: pulse 2s infinite;
+}
+
+/* Estados de sesiones con mejor contraste */
+.session-realizada {
+  background: #10b981 !important;
+  color: white !important;
+  border-left: 4px solid #047857 !important;
+}
+
+.session-cancelada-antelacion {
+  background: #f59e0b !important;
+  color: white !important;
+  border-left: 4px solid #b45309 !important;
+}
+
+.session-cancelada-sin-antelacion {
+  background: #ef4444 !important;
+  color: white !important;
+  border-left: 4px solid #b91c1c !important;
+}
+
+.session-cancelada-por-mi {
+  background: #6b7280 !important;
+  color: white !important;
+  border-left: 4px solid #374151 !important;
+}
+
+.session-pendiente {
+  background: #e5e7eb !important;
+  color: #374151 !important;
+  border-left: 4px solid #9ca3af !important;
+}
+
+.session-pendiente.past {
+  background: #fbbf24 !important;
+  color: #92400e !important;
+  border-left: 4px solid #d97706 !important;
+  animation: pulse 1.5s infinite;
+}
+
+/* Animaciones */
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Sidebar fija */
+.sidebar-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+  z-index: 40;
+}
+
+/* Ajuste del contenido principal para sidebar fija */
+.main-content-adjusted {
+  margin-left: 288px;
+  /* 72 * 4 = 288px (w-72) */
+}
+
+/* Calendario mejorado */
+.calendar-container-improved {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.calendar-grid-improved {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+}
+
+.calendar-header-improved {
+  background: #f8fafc;
+  padding: 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+}
+
+.calendar-day-improved {
+  min-height: 100px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-day-improved:hover {
+  background: #f9fafb;
+}
+
+.calendar-day-improved.other-month {
+  background: #f8fafc;
+  color: #9ca3af;
+}
+
+.calendar-day-improved.today {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+.calendar-day-improved.today:hover {
+  background: linear-gradient(135deg, #5a6fd8, #6a42a0);
+}
+
+.calendar-day-improved.has-sessions {
+  border-left: 3px solid #10b981;
+}
+
+.calendar-day-improved.has-pending {
+  border-left: 3px solid #f59e0b;
+  animation: pulse 2s infinite;
+}
+
+.day-number {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.day-sessions-improved {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  align-content: start;
+}
+
+.session-dot {
+  width: 100%;
+  height: 16px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  font-size: 10px;
+  color: white;
+  font-weight: 500;
+}
+
+.session-dot:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.session-dot.pending {
+  animation: pulse 1.5s infinite;
+}
+
+.session-icon {
+  font-size: 8px;
+}
+
+.session-time {
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.session-warning {
+  color: #fbbf24;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.session-more-compact {
+  grid-column: 1 / -1;
+  font-size: 9px;
+  color: #6b7280;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 2px;
+  padding: 1px 4px;
+  background: #f3f4f6;
+  border-radius: 3px;
+}
+
+/* Tooltips mejorados */
+.calendar-day-improved[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: pre-line;
+  z-index: 1000;
+  max-width: 200px;
+}
+
+.session-dot[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  z-index: 1001;
+  margin-bottom: 4px;
+}
+
+/* Responsive ajustado */
+@media (max-width: 1024px) {
+  .sidebar-fixed {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar-fixed.mobile-open {
+    transform: translateX(0);
+  }
+
+  .main-content-adjusted {
+    margin-left: 0;
+  }
+
+  .calendar-day-improved {
+    min-height: 80px;
+  }
+
+  .day-sessions-improved {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-day-improved {
+    min-height: 60px;
+    padding: 4px;
+  }
+
+  .session-dot {
+    height: 12px;
+    font-size: 8px;
+  }
+
+  .session-icon {
+    font-size: 6px;
+  }
+
+  .session-time {
+    font-size: 6px;
+  }
+}
+
+/* Estados de sesiones con colores específicos para los dots */
+.session-dot.realizada {
+  background: #10b981 !important;
+  border-left: 2px solid #047857 !important;
+}
+
+.session-dot.cancelada-antelacion {
+  background: #f59e0b !important;
+  border-left: 2px solid #b45309 !important;
+}
+
+.session-dot.cancelada-sin-antelacion {
+  background: #ef4444 !important;
+  border-left: 2px solid #b91c1c !important;
+}
+
+.session-dot.cancelada-por-mi {
+  background: #6b7280 !important;
+  border-left: 2px solid #374151 !important;
+}
+
+.session-dot.pendiente {
+  background: #e5e7eb !important;
+  color: #374151 !important;
+  border-left: 2px solid #9ca3af !important;
+}
+
+.session-dot.pendiente.past {
+  background: #fbbf24 !important;
+  color: #92400e !important;
+  border-left: 2px solid #d97706 !important;
+  animation: pulse 1.5s infinite;
+}
+
+/* Animación suave para scroll */
+.calendar-container-improved {
+  scroll-behavior: smooth;
+}
+
+/* Mejoras en la visualización del perfil */
+.profile-upload-hover:hover {
+  background: rgba(147, 51, 234, 0.8);
+}
+
+/* Loading states */
+.session-dot.loading {
+  background: #d1d5db !important;
+  animation: pulse 1s infinite;
+}
+
+/* Focus states para accesibilidad */
+.calendar-day-improved:focus {
+  outline: 2px solid #7c3aed;
+  outline-offset: -2px;
+}
+
+.session-dot:focus {
+  outline: 1px solid #7c3aed;
+  outline-offset: 1px;
+}
+
+
+/* Sidebar fija con altura completa */
+.sidebar-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+  z-index: 40;
+  overflow: hidden;
+  /* Evitar scroll en el contenedor principal */
+}
+
+/* Ajuste del contenido principal para sidebar fija */
+.main-content-adjusted {
+  margin-left: 288px;
+  /* 72 * 4 = 288px (w-72) */
+}
+
+/* Calendario mejorado con lista vertical */
+.calendar-container-improved {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.calendar-grid-improved {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+}
+
+.calendar-header-improved {
+  background: #f8fafc;
+  padding: 6px;
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.75rem;
+}
+
+.calendar-day-improved {
+  min-height: 110px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-day-improved:hover {
+  background: #f9fafb;
+}
+
+.calendar-day-improved.other-month {
+  background: #f8fafc;
+  color: #9ca3af;
+}
+
+.calendar-day-improved.today {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+.calendar-day-improved.today:hover {
+  background: linear-gradient(135deg, #5a6fd8, #6a42a0);
+}
+
+.calendar-day-improved.has-sessions {
+  border-left: 3px solid #10b981;
+}
+
+.calendar-day-improved.has-pending {
+  border-left: 3px solid #f59e0b;
+  animation: pulse 2s infinite;
+}
+
+.day-number {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Nueva estructura de lista vertical para sesiones */
+.day-sessions-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.session-item {
+  width: 100%;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  color: white;
+  font-weight: 500;
+  min-height: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.session-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.session-item.pending {
+  animation: pulse 1.5s infinite;
+}
+
+.session-content {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 3px;
+  width: 100%;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.session-icon {
+  font-size: 7px;
+  flex-shrink: 0;
+}
+
+.session-time {
+  font-size: 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.session-name {
+  font-size: 8px;
+  font-weight: 500;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-warning {
+  color: #fbbf24;
+  font-weight: bold;
+  font-size: 8px;
+  flex-shrink: 0;
+}
+
+.session-more-compact {
+  font-size: 8px;
+  color: #6b7280;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 1px;
+  padding: 1px 3px;
+  background: #f3f4f6;
+  border-radius: 3px;
+}
+
+/* Tooltips mejorados - REMOVIDOS para evitar duplicados */
+.calendar-day-improved[title]:hover::after,
+.session-item[title]:hover::after {
+  display: none;
+  /* Remover tooltips automáticos que se duplican */
+}
+
+/* Responsive ajustado */
+@media (max-width: 1024px) {
+  .sidebar-fixed {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar-fixed.mobile-open {
+    transform: translateX(0);
+  }
+
+  .main-content-adjusted {
+    margin-left: 0;
+  }
+
+  .calendar-day-improved {
+    min-height: 90px;
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-day-improved {
+    min-height: 70px;
+    padding: 3px;
+  }
+
+  .session-item {
+    min-height: 14px;
+  }
+
+  .session-content {
+    font-size: 8px;
+    gap: 1px;
+    padding: 1px 2px;
+  }
+
+  .session-icon {
+    font-size: 6px;
+  }
+
+  .session-time {
+    font-size: 7px;
+  }
+
+  .session-name {
+    font-size: 7px;
+  }
+}
+
+/* Estados de sesiones con colores específicos */
+.session-item.realizada {
+  background: #10b981 !important;
+}
+
+.session-item.cancelada-antelacion {
+  background: #f59e0b !important;
+}
+
+.session-item.cancelada-sin-antelacion {
+  background: #ef4444 !important;
+}
+
+.session-item.cancelada-por-mi {
+  background: #6b7280 !important;
+}
+
+.session-item.pendiente {
+  background: #e5e7eb !important;
+  color: #374151 !important;
+}
+
+.session-item.pendiente.past {
+  background: #fbbf24 !important;
+  color: #92400e !important;
+  animation: pulse 1.5s infinite;
+}
+
+/* Animación suave para scroll */
+.calendar-container-improved {
+  scroll-behavior: smooth;
+}
+
+/* Focus states para accesibilidad */
+.calendar-day-improved:focus {
+  outline: 2px solid #7c3aed;
+  outline-offset: -2px;
+}
+
+.session-item:focus {
+  outline: 1px solid #7c3aed;
+  outline-offset: 1px;
+}
+
+/* Sidebar específicos */
+.sidebar-fixed .overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.sidebar-fixed .overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-fixed .overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-fixed .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.sidebar-fixed .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
