@@ -11,7 +11,7 @@ const Modal = ({
   onSave,
   currencyMode,
   tipoCambio,
-  fechaPrecargada  // ✅ NUEVA PROP PARA FECHA PRE-CARGADA
+  fechaPrecargada
 }) => {
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
@@ -22,11 +22,14 @@ const Modal = ({
     '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'
   ];
 
+  // ✅ TIPOS QUE PERMITEN ACOMPAÑAMIENTO
+  const tiposConAcompanamiento = ['Evaluación', 'Re-evaluación', 'Devolución', 'Reunión con colegio'];
+
   useEffect(() => {
     if (isOpen) {
       initializeForm();
     }
-  }, [isOpen, type, data, fechaPrecargada]); // ✅ Agregar fechaPrecargada como dependencia
+  }, [isOpen, type, data, fechaPrecargada]);
 
   const initializeForm = () => {
     setErrors({});
@@ -66,32 +69,30 @@ const Modal = ({
 
       case 'add-sesion':
         const pacientesActivos = pacientes.filter(p => p.activo);
-
-        // ✅ USAR FECHA PRE-CARGADA SI ESTÁ DISPONIBLE
         const fechaHoraPorDefecto = fechaPrecargada || new Date().toISOString().slice(0, 16);
-
-        console.log('Inicializando nueva sesión:', {
-          fechaPrecargada,
-          fechaHoraPorDefecto,
-          tieneData: !!data
-        });
 
         setFormData({
           tipo_sesion: 'Sesión',
           paciente_id: pacientesActivos.length === 1 ? pacientesActivos[0].id : '',
           supervisora_id: supervisoras.length === 1 ? supervisoras[0].id : '',
-          fecha_hora: fechaHoraPorDefecto,  // ✅ USAR FECHA PRE-CARGADA
+          fecha_hora: fechaHoraPorDefecto,
           precio_por_hora: pacientesActivos.length === 1 ? pacientesActivos[0].precio_por_hora :
             supervisoras.length === 1 ? supervisoras[0].precio_por_hora : '',
           duracion_horas: 1,
-          estado: 'Pendiente'
+          estado: 'Pendiente',
+          // ✅ CAMPOS DE ACOMPAÑAMIENTO (nombres corregidos para coincidir con BD)
+          acompañado_supervisora: false,
+          supervisora_acompanante_id: ''
         });
         break;
 
       case 'edit-sesion':
         setFormData({
           ...data,
-          fecha_hora: new Date(data.fecha_hora).toISOString().slice(0, 16)
+          fecha_hora: new Date(data.fecha_hora).toISOString().slice(0, 16),
+          // ✅ CAMPOS DE ACOMPAÑAMIENTO para edición
+          acompañado_supervisora: data.acompañado_supervisora || false,
+          supervisora_acompanante_id: data.supervisora_acompanante_id || ''
         });
         break;
 
@@ -124,7 +125,10 @@ const Modal = ({
           [field]: value,
           paciente_id: '',
           supervisora_id: '',
-          duracion_horas: value === 'Evaluación' || value === 'Re-evaluación' ? 2 : 1
+          duracion_horas: value === 'Evaluación' || value === 'Re-evaluación' ? 2 : 1,
+          // ✅ Resetear campos de acompañamiento solo si el nuevo tipo no lo permite
+          acompañado_supervisora: tiposConAcompanamiento.includes(value) ? prev.acompañado_supervisora || false : false,
+          supervisora_acompanante_id: tiposConAcompanamiento.includes(value) ? prev.supervisora_acompanante_id || '' : ''
         };
 
         // Auto-seleccionar si hay solo uno disponible
@@ -134,6 +138,7 @@ const Modal = ({
             newData.precio_por_hora = supervisoras[0].precio_por_hora;
           }
         } else {
+          // Para todos los otros tipos (con paciente)
           if (pacientesActivos.length === 1) {
             newData.paciente_id = pacientesActivos[0].id;
             newData.precio_por_hora = pacientesActivos[0].precio_por_hora;
@@ -142,7 +147,22 @@ const Modal = ({
 
         return newData;
       });
-      return; // Salir temprano para evitar el setFormData de arriba
+      return;
+    }
+
+    // ✅ LÓGICA para checkbox de acompañamiento
+    if (field === 'acompañado_supervisora') {
+      const supervisorasActivas = supervisoras.filter(s => !s.eliminado);
+
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+        // Si marca acompañamiento y hay solo 1 supervisora, auto-seleccionar
+        supervisora_acompanante_id: value && supervisorasActivas.length === 1
+          ? supervisorasActivas[0].id
+          : ''
+      }));
+      return;
     }
 
     if (field === 'paciente_id' && value) {
@@ -202,7 +222,6 @@ const Modal = ({
       if (!formData.precio_por_hora || formData.precio_por_hora <= 0) newErrors.precio_por_hora = 'Precio válido requerido';
       if (!formData.fecha_inicio) newErrors.fecha_inicio = 'Fecha de inicio requerida';
 
-      // Validar horarios
       if (!formData.horarios || formData.horarios.length === 0) {
         newErrors.horarios = 'Debe agregar al menos un horario';
       } else {
@@ -227,8 +246,15 @@ const Modal = ({
         newErrors.supervisora_id = 'Supervisora requerida';
       }
 
-      if (['Sesión', 'Evaluación', 'Re-evaluación'].includes(formData.tipo_sesion) && !formData.paciente_id) {
+      if (['Sesión', 'Evaluación', 'Re-evaluación', 'Devolución', 'Reunión con colegio'].includes(formData.tipo_sesion) && !formData.paciente_id) {
         newErrors.paciente_id = 'Paciente requerido';
+      }
+
+      // ✅ VALIDACIÓN para acompañamiento
+      if (tiposConAcompanamiento.includes(formData.tipo_sesion) &&
+        formData.acompañado_supervisora &&
+        !formData.supervisora_acompanante_id) {
+        newErrors.supervisora_acompanante_id = 'Supervisora acompañante requerida';
       }
     }
 
@@ -270,6 +296,14 @@ const Modal = ({
       // Asegurar que los números son números
       cleanFormData.precio_por_hora = parseFloat(cleanFormData.precio_por_hora);
       cleanFormData.duracion_horas = parseFloat(cleanFormData.duracion_horas);
+
+      // ✅ Limpiar campos de acompañamiento si no aplican
+      if (!tiposConAcompanamiento.includes(cleanFormData.tipo_sesion)) {
+        cleanFormData.acompañado_supervisora = false;
+        cleanFormData.supervisora_acompanante_id = null;
+      } else if (!cleanFormData.acompañado_supervisora) {
+        cleanFormData.supervisora_acompanante_id = null;
+      }
     }
 
     // Para pacientes, asegurar tipos correctos
@@ -296,7 +330,7 @@ const Modal = ({
       case 'edit-paciente': return 'Editar Paciente';
       case 'add-supervisora': return 'Nueva Supervisora';
       case 'edit-supervisora': return 'Editar Supervisora';
-      case 'add-sesion': return fechaPrecargada ? 'Nueva Sesión para el Día' : 'Nueva Sesión'; // ✅ Título dinámico
+      case 'add-sesion': return fechaPrecargada ? 'Nueva Sesión para el Día' : 'Nueva Sesión';
       case 'edit-sesion': return 'Editar Sesión';
       default: return 'Modal';
     }
@@ -314,7 +348,6 @@ const Modal = ({
               {type.includes('sesion') && <Calendar className="text-purple-600" size={24} />}
               {getModalTitle()}
             </h2>
-            {/* ✅ MOSTRAR FECHA PRE-CARGADA EN SUBTITLE */}
             {fechaPrecargada && type === 'add-sesion' && (
               <p className="text-sm text-purple-600 mt-1">
                 📅 Fecha pre-cargada: {new Date(fechaPrecargada).toLocaleDateString('es-AR', {
@@ -562,7 +595,6 @@ const Modal = ({
           {/* Formulario de Sesión */}
           {type.includes('sesion') && (
             <>
-              {/* ✅ ALERTA SI HAY FECHA PRE-CARGADA */}
               {fechaPrecargada && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-2">
@@ -587,6 +619,8 @@ const Modal = ({
                     <option value="Sesión">Sesión</option>
                     <option value="Evaluación">Evaluación</option>
                     <option value="Re-evaluación">Re-evaluación</option>
+                    <option value="Devolución">Devolución</option>
+                    <option value="Reunión con colegio">Reunión con colegio</option>
                     <option value="Supervisión">Supervisión</option>
                   </select>
                 </div>
@@ -631,6 +665,56 @@ const Modal = ({
                   )}
                 </div>
               </div>
+
+              {/* ✅ SECCIÓN DE ACOMPAÑAMIENTO - Solo para tipos específicos */}
+              {tiposConAcompanamiento.includes(formData.tipo_sesion) && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Checkbox de acompañamiento */}
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="acompañado_supervisora"
+                        checked={formData.acompañado_supervisora || false}
+                        onChange={(e) => handleInputChange('acompañado_supervisora', e.target.checked)}
+                        className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500"
+                      />
+                      <label
+                        htmlFor="acompañado_supervisora"
+                        className="ml-2 text-sm font-medium text-gray-700"
+                      >
+                        ¿Vas acompañada por supervisora?
+                      </label>
+                    </div>
+
+                    {/* Dropdown de supervisoras - Solo si está marcado el checkbox */}
+                    {formData.acompañado_supervisora && (
+                      <div className="flex-1">
+                        <select
+                          value={formData.supervisora_acompanante_id || ''}
+                          onChange={(e) => handleInputChange('supervisora_acompanante_id', e.target.value)}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm ${errors.supervisora_acompanante_id ? 'border-red-500' : 'border-gray-300'}`}
+                        >
+                          <option value="">Seleccionar supervisora...</option>
+                          {supervisoras.filter(s => !s.eliminado).map(supervisora => (
+                            <option key={supervisora.id} value={supervisora.id}>
+                              {supervisora.nombre_apellido}
+                            </option>
+                          ))}
+                        </select>
+                        {errors.supervisora_acompanante_id && (
+                          <p className="text-red-500 text-xs mt-1">{errors.supervisora_acompanante_id}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Nota explicativa */}
+                  <div className="mt-2 text-xs text-purple-600">
+                    💡 El precio se mantiene según el paciente. La supervisora recibe el 50% a fin de mes.
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -716,12 +800,23 @@ const Modal = ({
                     <div className="text-green-600 flex items-center gap-1">
                       <DollarSign size={14} />
                       Se factura: ${((formData.precio_por_hora || 0) * (formData.duracion_horas || 1)).toLocaleString()}
+                      {/* Mostrar info de supervisora si aplica */}
+                      {tiposConAcompanamiento.includes(formData.tipo_sesion) && formData.acompañado_supervisora && (
+                        <span className="text-purple-600 ml-2">
+                          (Supervisora: ${(((formData.precio_por_hora || 0) * (formData.duracion_horas || 1)) / 2).toLocaleString()})
+                        </span>
+                      )}
                     </div>
                   )}
                   {formData.estado === 'Cancelada sin antelación' && (
                     <div className="text-orange-600 flex items-center gap-1">
                       <DollarSign size={14} />
                       Se factura: ${((formData.precio_por_hora || 0) * (formData.duracion_horas || 1)).toLocaleString()}
+                      {tiposConAcompanamiento.includes(formData.tipo_sesion) && formData.acompañado_supervisora && (
+                        <span className="text-purple-600 ml-2">
+                          (Supervisora: ${(((formData.precio_por_hora || 0) * (formData.duracion_horas || 1)) / 2).toLocaleString()})
+                        </span>
+                      )}
                     </div>
                   )}
                   {(formData.estado === 'Cancelada con antelación' || formData.estado === 'Cancelada por mí' || formData.estado === 'Cancelada') && (
