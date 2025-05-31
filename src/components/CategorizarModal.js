@@ -207,8 +207,8 @@ const CategorizarModal = ({
                               </div>
 
                               <span className={`px-2 py-1 rounded text-xs font-medium ${diasPasados <= 3
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
                                 }`}>
                                 Hace {diasPasados} día{diasPasados !== 1 ? 's' : ''}
                               </span>

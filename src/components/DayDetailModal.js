@@ -13,7 +13,6 @@ const DayDetailModal = ({
   onCategorizarSesion,
   currencyMode,
   tipoCambio,
-  // ✅ NUEVA PROP PARA CREAR SESIÓN
   onNuevaSesion
 }) => {
   // Estado local para manejar sesiones y actualizaciones inmediatas
@@ -27,7 +26,7 @@ const DayDetailModal = ({
     setSesionesLocales(sesiones || []);
   }, [sesiones]);
 
-  // ✅ CERRAR DROPDOWN AL HACER CLIC FUERA
+  // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (cancelMenuRef.current && !cancelMenuRef.current.contains(event.target)) {
@@ -51,7 +50,7 @@ const DayDetailModal = ({
   };
 
   const getPacienteById = (id) => pacientes.find(p => p.id === id);
-  const getSupervisoraById = (id) => supervisoras.find(s => s.id === s.id);
+  const getSupervisoraById = (id) => supervisoras.find(s => s.id === id);
 
   const getSessionIcon = (sesion) => {
     switch (sesion.tipo_sesion) {
@@ -81,136 +80,207 @@ const DayDetailModal = ({
     }
   };
 
-  // ✅ FUNCIÓN PARA VERIFICAR SI QUEDAN SESIONES POR CATEGORIZAR
+  // ✅ FUNCIÓN CORREGIDA: Contar sesiones pendientes del DÍA (no solo del pasado)
   const quedanSesionesPendientes = () => {
-    const hoy = new Date();
-    const pendientes = sesionesLocales.filter(s =>
-      s.estado === 'Pendiente' && new Date(s.fecha_hora) < hoy
-    );
+    // Contar TODAS las sesiones pendientes del día mostrado en el modal
+    const pendientes = sesionesLocales.filter(s => s.estado === 'Pendiente');
+    console.log('📊 Sesiones pendientes en el día:', pendientes.length);
+    console.log('📋 Sesiones pendientes:', pendientes.map(s => ({
+      id: s.id,
+      hora: new Date(s.fecha_hora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+      estado: s.estado
+    })));
     return pendientes.length;
   };
 
-  // ✅ FUNCIÓN PARA AUTO-CERRAR SI NO QUEDAN PENDIENTES
+  // ✅ FUNCIÓN CORREGIDA: Auto-cerrar con mejor lógica
   const verificarAutoCierre = () => {
     const pendientesRestantes = quedanSesionesPendientes();
-    console.log('Sesiones pendientes restantes:', pendientesRestantes);
+    console.log('🔍 Verificando auto-cierre...');
+    console.log('📊 Sesiones pendientes restantes:', pendientesRestantes);
+    console.log('📋 Total sesiones en el modal:', sesionesLocales.length);
 
+    // Si no quedan sesiones pendientes EN EL DÍA, cerrar modal
     if (pendientesRestantes === 0) {
-      // Dar un pequeño delay para que el usuario vea el cambio
-      setTimeout(() => {
-        if (window.showToast) {
+      console.log('✅ No quedan sesiones pendientes, cerrando modal...');
+
+      // Toast de éxito
+      if (window.showToast) {
+        if (sesionesLocales.length === 0) {
+          window.showToast('🎉 Sesión categorizada y día completado', 'success', 2000);
+        } else {
           window.showToast('🎉 Todas las sesiones del día categorizadas', 'success', 2000);
         }
+      }
+
+      // Cerrar modal después de un pequeño delay para que el usuario vea el cambio
+      setTimeout(() => {
+        console.log('🚪 Cerrando modal automáticamente...');
         onClose();
       }, 800);
+    } else {
+      console.log(`⏳ Aún quedan ${pendientesRestantes} sesiones pendientes, modal permanece abierto`);
     }
   };
 
-  // ✅ FUNCIÓN PARA MARCAR COMO REALIZADA - USA CALLBACK PRINCIPAL
+  // ✅ FUNCIÓN MEJORADA: Marcar como realizada con mejor manejo de estado
   const handleMarcarRealizada = async (sesion) => {
     try {
-      // Actualizar inmediatamente en el estado local
-      setSesionesLocales(prev =>
-        prev.map(s => s.id === sesion.id ? { ...s, estado: 'Realizada' } : s)
-      );
+      console.log('=== MARCANDO COMO REALIZADA ===');
+      console.log('Sesión:', sesion.id);
+      console.log('Estado actual:', sesion.estado);
 
-      // ✅ USAR CALLBACK QUE ACTUALIZA SUPABASE Y ESTADO PRINCIPAL
+      // 1. Actualizar inmediatamente en el estado local para feedback visual
+      setSesionesLocales(prev => {
+        const nuevasSesiones = prev.map(s =>
+          s.id === sesion.id ? { ...s, estado: 'Realizada' } : s
+        );
+        console.log('📊 Estado local actualizado:', nuevasSesiones.map(s => ({
+          id: s.id,
+          estado: s.estado
+        })));
+        return nuevasSesiones;
+      });
+
+      // 2. Usar callback que actualiza Supabase y estado principal
       const exito = await onCategorizarSesion(sesion, 'Realizada');
 
       if (exito !== false) {
-        // Mostrar toast de éxito
+        // 3. Toast de éxito
         if (window.showToast) {
-          window.showToast('✅ Sesión marcada como realizada', 'success', 3000);
+          window.showToast('✅ Sesión marcada como realizada', 'success', 2000);
         }
 
-        // ✅ VERIFICAR AUTO-CIERRE
-        setTimeout(verificarAutoCierre, 100); // Pequeño delay para que se actualice el estado
+        // 4. Verificar auto-cierre después de actualización
+        setTimeout(() => {
+          console.log('🔄 Verificando auto-cierre después de marcar realizada...');
+          verificarAutoCierre();
+        }, 200); // 200ms para que se actualice el estado local
+
       } else {
         throw new Error('Error en la actualización');
       }
     } catch (error) {
-      console.error('Error al marcar como realizada:', error);
+      console.error('❌ Error al marcar como realizada:', error);
+
       // Revertir cambio local en caso de error
       setSesionesLocales(prev =>
         prev.map(s => s.id === sesion.id ? { ...s, estado: 'Pendiente' } : s)
       );
+
       if (window.showToast) {
         window.showToast('❌ Error al actualizar la sesión', 'error');
       }
     }
   };
 
-  // ✅ FUNCIÓN PARA CANCELAR CON TIPO ESPECÍFICO - USA CALLBACK PRINCIPAL
+  // ✅ FUNCIÓN MEJORADA: Cancelar con mejor manejo de estado
   const handleCancelar = async (sesion, tipoCancel) => {
     try {
-      // Actualizar inmediatamente en el estado local
-      setSesionesLocales(prev =>
-        prev.map(s => s.id === sesion.id ? { ...s, estado: tipoCancel } : s)
-      );
+      console.log('=== CANCELANDO SESIÓN ===');
+      console.log('Sesión:', sesion.id);
+      console.log('Tipo cancelación:', tipoCancel);
 
-      // ✅ USAR CALLBACK QUE ACTUALIZA SUPABASE Y ESTADO PRINCIPAL
+      // 1. Actualizar inmediatamente en el estado local
+      setSesionesLocales(prev => {
+        const nuevasSesiones = prev.map(s =>
+          s.id === sesion.id ? { ...s, estado: tipoCancel } : s
+        );
+        console.log('📊 Estado local actualizado (cancelación):', nuevasSesiones.map(s => ({
+          id: s.id,
+          estado: s.estado
+        })));
+        return nuevasSesiones;
+      });
+
+      // 2. Usar callback que actualiza Supabase y estado principal
       const exito = await onCategorizarSesion(sesion, tipoCancel);
 
       if (exito !== false) {
-        // Cerrar menú de cancelación
+        // 3. Cerrar menú de cancelación
         setShowCancelMenu(null);
 
-        // Mostrar toast de éxito
+        // 4. Toast de éxito
         if (window.showToast) {
-          window.showToast(`❌ Sesión cancelada: ${tipoCancel}`, 'info', 3000);
+          window.showToast(`❌ Sesión cancelada: ${tipoCancel}`, 'info', 2000);
         }
 
-        // ✅ VERIFICAR AUTO-CIERRE
-        setTimeout(verificarAutoCierre, 100); // Pequeño delay para que se actualice el estado
+        // 5. Verificar auto-cierre después de actualización
+        setTimeout(() => {
+          console.log('🔄 Verificando auto-cierre después de cancelar...');
+          verificarAutoCierre();
+        }, 200);
+
       } else {
         throw new Error('Error en la actualización');
       }
     } catch (error) {
-      console.error('Error al cancelar sesión:', error);
+      console.error('❌ Error al cancelar sesión:', error);
+
       // Revertir cambio local en caso de error
       setSesionesLocales(prev =>
         prev.map(s => s.id === sesion.id ? { ...s, estado: 'Pendiente' } : s)
       );
+
       if (window.showToast) {
         window.showToast('❌ Error al actualizar la sesión', 'error');
       }
     }
   };
 
-  // ✅ FUNCIÓN PARA ELIMINAR CON CONFIRMACIÓN
+  // ✅ FUNCIÓN MEJORADA: Eliminar con verificación de auto-cierre
   const handleEliminarConConfirmacion = async (sesion) => {
     try {
-      // Eliminar inmediatamente del estado local (animación)
-      setSesionesLocales(prev => prev.filter(s => s.id !== sesion.id));
+      console.log('=== ELIMINANDO SESIÓN ===');
+      console.log('Sesión a eliminar:', sesion.id);
+      console.log('Sesiones antes de eliminar:', sesionesLocales.length);
 
-      // Llamar al callback para eliminar de la base de datos
+      // 1. Eliminar inmediatamente del estado local
+      setSesionesLocales(prev => {
+        const nuevasSesiones = prev.filter(s => s.id !== sesion.id);
+        console.log('📊 Sesiones después de eliminar:', nuevasSesiones.length);
+        return nuevasSesiones;
+      });
+
+      // 2. Eliminar de la base de datos
       if (onEliminarSesion) {
         await onEliminarSesion(sesion);
       }
 
-      // Cerrar modal de confirmación
+      // 3. Cerrar modal de confirmación
       setShowConfirmDelete(null);
 
-      // Mostrar toast de éxito
+      // 4. Toast de éxito
       if (window.showToast) {
-        window.showToast('🗑️ Sesión eliminada correctamente', 'success', 3000);
+        window.showToast('🗑️ Sesión eliminada correctamente', 'success', 2000);
       }
 
-      // Si no quedan sesiones, cerrar el modal completo
-      if (sesionesLocales.length <= 1) {
-        setTimeout(() => onClose(), 500);
-      }
+      // 5. Verificar auto-cierre o cierre por falta de sesiones
+      setTimeout(() => {
+        // Si no quedan sesiones en el día, cerrar inmediatamente
+        if (sesionesLocales.length <= 1) { // <= 1 porque ya eliminamos una
+          console.log('📭 No quedan sesiones en el día, cerrando modal...');
+          setTimeout(() => onClose(), 500);
+        } else {
+          // Si quedan sesiones, verificar si hay pendientes
+          console.log('🔄 Verificando auto-cierre después de eliminar...');
+          verificarAutoCierre();
+        }
+      }, 100);
+
     } catch (error) {
-      console.error('Error al eliminar sesión:', error);
+      console.error('❌ Error al eliminar sesión:', error);
+
       // Revertir la eliminación local
       setSesionesLocales(sesiones);
+
       if (window.showToast) {
         window.showToast('❌ Error al eliminar la sesión', 'error');
       }
     }
   };
 
-  // ✅ FUNCIÓN PARA CREAR NUEVA SESIÓN CON FECHA PRE-CARGADA
+  // Función para crear nueva sesión con fecha pre-cargada
   const handleNuevaSesion = () => {
     if (onNuevaSesion) {
       // Crear fecha y hora por defecto (fecha del modal + hora actual o 10:00)
@@ -251,7 +321,7 @@ const DayDetailModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
       <div className="modal-content max-w-2xl w-full mx-4 rounded-xl shadow-2xl max-h-[80vh] overflow-y-auto">
 
-        {/* ✅ HEADER CON BOTÓN NUEVA SESIÓN */}
+        {/* Header con botón nueva sesión */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
@@ -275,7 +345,7 @@ const DayDetailModal = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* ✅ BOTÓN NUEVA SESIÓN */}
+            {/* Botón nueva sesión */}
             <button
               onClick={handleNuevaSesion}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-lg"
@@ -365,10 +435,10 @@ const DayDetailModal = ({
                         </div>
                       </div>
 
-                      {/* ✅ BOTONES DE ACCIÓN MEJORADOS */}
+                      {/* Botones de acción mejorados */}
                       <div className="flex items-center gap-2">
 
-                        {/* ✅ BOTONES DE CATEGORIZACIÓN RÁPIDA - Solo si está pendiente */}
+                        {/* Botones de categorización rápida - Solo si está pendiente */}
                         {isPending && (
                           <>
                             {/* Botón REALIZADA */}
@@ -435,7 +505,7 @@ const DayDetailModal = ({
           )}
         </div>
 
-        {/* ✅ FOOTER CON INFO ADICIONAL */}
+        {/* Footer con info adicional */}
         <div className="flex justify-between items-center p-6 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-600">
             {sesionsPendientesCount > 0 ? (
@@ -462,7 +532,7 @@ const DayDetailModal = ({
         </div>
       </div>
 
-      {/* ✅ MODAL DE CONFIRMACIÓN DE ELIMINACIÓN */}
+      {/* Modal de confirmación de eliminación */}
       {showConfirmDelete && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-2xl">

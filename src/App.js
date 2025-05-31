@@ -15,6 +15,7 @@ import Modal from './components/Modal';
 import CategorizarModal from './components/CategorizarModal';
 import DayDetailModal from './components/DayDetailModal';
 import ConfirmacionCambiosModal from './components/ConfirmacionCambiosModal';
+import ConflictoHorarioModal from './components/ConflictoHorarioModal';
 import ToastSystem from './components/ToastSystem';
 
 function App() {
@@ -23,9 +24,9 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
-  const [currencyMode, setCurrencyMode] = useState('ARS'); // ARS o USD
+  const [currencyMode, setCurrencyMode] = useState('ARS');
   const [loading, setLoading] = useState(true);
-  const [fechaPrecargada, setFechaPrecargada] = useState(null); // ✅ NUEVA: Para pre-cargar fecha en nueva sesión
+  const [fechaPrecargada, setFechaPrecargada] = useState(null);
 
   // Estados para datos
   const [pacientes, setPacientes] = useState([]);
@@ -41,6 +42,240 @@ function App() {
   const [formDataPendiente, setFormDataPendiente] = useState(null);
   const [selectedItemPendiente, setSelectedItemPendiente] = useState(null);
 
+  // Estados para validación de conflictos
+  const [showConflictoModal, setShowConflictoModal] = useState(false);
+  const [conflictoDetectado, setConflictoDetectado] = useState(null);
+  const [sesionConConflicto, setSesionConConflicto] = useState(null);
+
+  // ============================================================================
+  // ✅ FUNCIONES CORREGIDAS PARA FECHAS EN ARGENTINA (UTC-3)
+  // ============================================================================
+
+  const convertirFechaParaGuardar = (fechaInput) => {
+    if (!fechaInput) return null;
+
+    try {
+      const [fechaStr, horaStr] = fechaInput.split('T');
+      const [año, mes, dia] = fechaStr.split('-').map(Number);
+      const [hora, minuto] = horaStr.split(':').map(Number);
+
+      // Crear fecha local
+      const fechaLocal = new Date(año, mes - 1, dia, hora, minuto);
+
+      // Construir manualmente string local sin timezone
+      const pad = (n) => String(n).padStart(2, '0');
+      const fechaFinal = `${año}-${pad(mes)}-${pad(dia)} ${pad(hora)}:${pad(minuto)}:00`;
+
+      console.log('🕐 Fecha final local para guardar:', fechaFinal);
+
+      return fechaFinal;
+    } catch (error) {
+      console.error('❌ Error convirtiendo fecha para guardar:', error);
+      return fechaInput;
+    }
+  };
+
+
+  const convertirFechaParaInput = (fechaISO) => {
+    if (!fechaISO) return '';
+
+    try {
+      console.log('📅 Convirtiendo fecha ISO a input (Argentina):', fechaISO);
+
+      const fecha = new Date(fechaISO);
+
+      // Usar métodos locales para mantener zona horaria
+      const año = fecha.getFullYear();
+      const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+      const dia = String(fecha.getDate()).padStart(2, '0');
+      const horas = String(fecha.getHours()).padStart(2, '0');
+      const minutos = String(fecha.getMinutes()).padStart(2, '0');
+
+      const fechaFormateada = `${año}-${mes}-${dia}T${horas}:${minutos}`;
+
+      console.log('📅 ISO original:', fechaISO);
+      console.log('📅 Fecha parseada:', fecha.toString());
+      console.log('📅 Para input:', fechaFormateada);
+
+      return fechaFormateada;
+    } catch (error) {
+      console.error('❌ Error formateando fecha para input:', error);
+      return '';
+    }
+  };
+
+  const diagnosticarFechasEnSesiones = async () => {
+    try {
+      console.log('🔍 Iniciando diagnóstico de fechas...');
+
+      const { data: sesiones, error } = await supabase
+        .from('sesiones')
+        .select('id, fecha_hora, tipo_sesion')
+        .eq('eliminado', false)
+        .order('fecha_hora')
+        .limit(50);
+
+      if (error) throw error;
+
+      console.log(`📊 Analizando ${sesiones.length} sesiones...`);
+
+      sesiones.forEach((sesion, index) => {
+        const fecha = new Date(sesion.fecha_hora);
+        const fechaLocal = new Date(fecha.toLocaleString());
+
+        console.log(`Sesión ${index + 1}:`, {
+          id: sesion.id,
+          tipo: sesion.tipo_sesion,
+          fecha_iso: sesion.fecha_hora,
+          fecha_parseada: fecha.toString(),
+          fecha_local: fechaLocal.toString(),
+          dia_semana: fecha.getDay(),
+          hora: fecha.getHours() + ':' + fecha.getMinutes().toString().padStart(2, '0')
+        });
+      });
+
+      console.log('✅ Diagnóstico completado');
+
+    } catch (error) {
+      console.error('❌ Error en diagnóstico:', error);
+    }
+  };
+
+  const diagnosticarZonaHoraria = () => {
+    console.log('🔍 DIAGNÓSTICO DE ZONA HORARIA ARGENTINA:');
+
+    const ahora = new Date();
+    console.log('📊 Información actual:', {
+      zona: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      offset_UTC: ahora.getTimezoneOffset() + ' minutos',
+      hora_local: ahora.toLocaleString('es-AR'),
+      hora_UTC: ahora.toUTCString(),
+      ISO: ahora.toISOString()
+    });
+
+    // Probar conversión de 10:00 AM
+    const testInput = '2025-01-30T10:00';
+    const fechaGuardada = convertirFechaParaGuardar(testInput);
+    const fechaParaInput = convertirFechaParaInput(fechaGuardada);
+
+    console.log('🧪 PRUEBA 10:00 AM:');
+    console.log('  1. Input:', testInput);
+    console.log('  2. Para guardar:', fechaGuardada);
+    console.log('  3. Para mostrar:', fechaParaInput);
+    console.log('  4. ¿Coincide?:', testInput === fechaParaInput ? '✅ CORRECTO' : '❌ ERROR');
+
+    if (fechaGuardada) {
+      const fechaDB = new Date(fechaGuardada);
+      console.log('🗄️ En base de datos se ve como:', fechaDB.toLocaleString('es-AR'));
+    }
+  };
+
+  // ============================================================================
+  // FUNCIONES PARA VALIDACIÓN DE CONFLICTOS
+  // ============================================================================
+
+  const verificarConflictoHorario = async (fechaHora, duracionHoras = 1.0, excluirSesionId = null) => {
+    try {
+      console.log('🔍 Verificando conflicto de horario...');
+      console.log('Fecha/hora:', fechaHora);
+      console.log('Duración:', duracionHoras);
+      console.log('Excluir sesión ID:', excluirSesionId);
+
+      const { data, error } = await supabase.rpc('verificar_conflicto_horario', {
+        p_fecha_hora: fechaHora,
+        p_duracion_horas: duracionHoras,
+        p_excluir_sesion_id: excluirSesionId
+      });
+
+      if (error) {
+        console.error('Error verificando conflicto:', error);
+        return null;
+      }
+
+      console.log('Resultado verificación:', data);
+
+      if (data && data.length > 0) {
+        const conflicto = data[0];
+
+        if (conflicto.conflicto) {
+          return {
+            hayConflicto: true,
+            sesionConflictiva: {
+              id: conflicto.sesion_conflictiva_id,
+              pacienteNombre: conflicto.paciente_nombre,
+              supervisoraNombre: conflicto.supervisora_nombre
+            }
+          };
+        }
+      }
+
+      return { hayConflicto: false };
+
+    } catch (error) {
+      console.error('Error en verificación de conflicto:', error);
+      return null;
+    }
+  };
+
+  const procederConGuardadoNormal = async (formData) => {
+    if (modalType === 'add-paciente') {
+      await ejecutarGuardadoPaciente(formData, false);
+    } else if (modalType === 'edit-paciente') {
+      const cambios = detectarCambiosPaciente(selectedItem, formData);
+      if (cambios.mostrarModal) {
+        setCambiosDetectados(cambios);
+        setFormDataPendiente(formData);
+        setSelectedItemPendiente(selectedItem);
+        setShowModal(false);
+        setShowConfirmacionModal(true);
+        return;
+      } else {
+        await ejecutarGuardadoPaciente(formData, true);
+      }
+    } else {
+      await ejecutarGuardadoOtrosTipos(formData);
+    }
+  };
+
+  const confirmarCreacionConConflicto = async () => {
+    try {
+      console.log('✅ Usuario confirmó creación a pesar del conflicto');
+
+      setShowConflictoModal(false);
+
+      if (sesionConConflicto) {
+        await procederConGuardadoNormal(sesionConConflicto);
+        setSesionConConflicto(null);
+        setConflictoDetectado(null);
+      }
+    } catch (error) {
+      console.error('Error confirmando creación con conflicto:', error);
+      handleError(error);
+    }
+  };
+
+  const cancelarCreacionPorConflicto = () => {
+    console.log('❌ Usuario canceló creación por conflicto');
+
+    setShowConflictoModal(false);
+    setSesionConConflicto(null);
+    setConflictoDetectado(null);
+
+    if (window.showToast) {
+      window.showToast('💡 Cambia la fecha/hora para evitar la superposición', 'info', 4000);
+    }
+  };
+
+  // Exponer funciones de diagnóstico
+  useEffect(() => {
+    window.diagnosticarFechasEnSesiones = diagnosticarFechasEnSesiones;
+    window.diagnosticarZonaHoraria = diagnosticarZonaHoraria;
+    return () => {
+      delete window.diagnosticarFechasEnSesiones;
+      delete window.diagnosticarZonaHoraria;
+    };
+  }, []);
+
   // Cargar datos iniciales
   useEffect(() => {
     loadInitialData();
@@ -50,7 +285,6 @@ function App() {
     try {
       setLoading(true);
 
-      // ✅ CORRECCIÓN: Cargar TODOS los pacientes (incluyendo eliminados)
       const { data: pacientesData, error: pacientesError } = await supabase
         .from('pacientes')
         .select(`
@@ -61,14 +295,12 @@ function App() {
             hora_inicio
           )
         `)
-        // CORRECCIÓN: Eliminar .eq('eliminado', false) para cargar también eliminados
-        .order('eliminado')  // Primero los no eliminados
+        .order('eliminado')
         .order('activo', { ascending: false })
         .order('nombre_apellido');
 
       if (pacientesError) throw pacientesError;
 
-      // Transformar los datos para que horarios_pacientes se llame horarios
       const pacientesConHorarios = (pacientesData || []).map(paciente => ({
         ...paciente,
         horarios: paciente.horarios_pacientes || []
@@ -76,7 +308,6 @@ function App() {
 
       setPacientes(pacientesConHorarios);
 
-      // Cargar supervisoras
       const { data: supervisorasData, error: supervisorasError } = await supabase
         .from('supervisoras')
         .select('*')
@@ -86,7 +317,6 @@ function App() {
       if (supervisorasError) throw supervisorasError;
       setSupervisoras(supervisorasData || []);
 
-      // Cargar sesiones (últimos 3 meses hacia adelante)
       const fechaInicio = new Date();
       fechaInicio.setMonth(fechaInicio.getMonth() - 3);
 
@@ -100,13 +330,11 @@ function App() {
       if (sesionesError) throw sesionesError;
       setSesiones(sesionesData || []);
 
-      // Contar sesiones pendientes (solo no eliminadas)
       const pendientes = (sesionesData || []).filter(s =>
         s.estado === 'Pendiente' && new Date(s.fecha_hora) < new Date() && !s.eliminado
       ).length;
       setSesionsPendientes(pendientes);
 
-      // Cargar configuración de alquiler
       const { data: alquilerData, error: alquilerError } = await supabase
         .from('configuracion_alquiler')
         .select('*')
@@ -117,19 +345,16 @@ function App() {
         setAlquilerConfig(alquilerData);
       }
 
-      // Obtener tipo de cambio actual (simulado)
       setTipoCambio(1150);
 
     } catch (error) {
       console.error('Error loading data:', error);
-      // Cargar datos de ejemplo en caso de error
       loadExampleData();
     } finally {
       setLoading(false);
     }
   };
 
-  // Debug: Verificar pacientes eliminados cargados
   useEffect(() => {
     if (pacientes.length > 0) {
       const eliminados = pacientes.filter(p => p.eliminado);
@@ -140,7 +365,6 @@ function App() {
     }
   }, [pacientes]);
 
-  // Datos de ejemplo para desarrollo
   const loadExampleData = () => {
     setPacientes([
       {
@@ -174,7 +398,6 @@ function App() {
       { id: '2', nombre_apellido: 'Lic. Ana Rodríguez', precio_por_hora: 7500 }
     ]);
 
-    // Generar sesiones de ejemplo
     const sesionesEjemplo = [];
     const hoy = new Date();
     for (let i = -7; i <= 30; i++) {
@@ -182,7 +405,7 @@ function App() {
       fecha.setDate(hoy.getDate() + i);
       fecha.setHours(10, 0, 0, 0);
 
-      if (fecha.getDay() === 2) { // Martes para Juan
+      if (fecha.getDay() === 2) {
         sesionesEjemplo.push({
           id: `s1-${i}`,
           tipo_sesion: 'Sesión',
@@ -198,7 +421,7 @@ function App() {
           horario_origen_id: 'h1'
         });
       }
-      if (fecha.getDay() === 4) { // Jueves para María
+      if (fecha.getDay() === 4) {
         fecha.setHours(14, 0, 0, 0);
         sesionesEjemplo.push({
           id: `s2-${i}`,
@@ -218,16 +441,12 @@ function App() {
     }
     setSesiones(sesionesEjemplo);
 
-    // Contar sesiones pendientes (solo no eliminadas)
     const pendientes = sesionesEjemplo.filter(s =>
       s.estado === 'Pendiente' && new Date(s.fecha_hora) < hoy && !s.eliminado
     ).length;
     setSesionsPendientes(pendientes);
   };
 
-  // ============================================================================
-  // ✅ FUNCIÓN NUEVA: ACTUALIZAR SESIÓN LOCAL AUTOMÁTICAMENTE
-  // ============================================================================
   const actualizarSesionLocal = (sesionActualizada) => {
     console.log('Actualizando sesión local:', sesionActualizada);
 
@@ -235,7 +454,6 @@ function App() {
       s.id === sesionActualizada.id ? { ...s, ...sesionActualizada } : s
     ));
 
-    // Actualizar contador de pendientes si cambió el estado
     if (sesionActualizada.estado) {
       const hoy = new Date();
       const esPasada = new Date(sesionActualizada.fecha_hora) < hoy;
@@ -250,19 +468,14 @@ function App() {
     }
   };
 
-  // ============================================================================
-  // ✅ FUNCIÓN CORREGIDA PARA CATEGORIZAR SESIÓN (desde DayDetailModal)
-  // ============================================================================
   const handleCategorizarSesionRapida = async (sesionOriginal, nuevoEstado) => {
     try {
       console.log('=== CATEGORIZACIÓN RÁPIDA ===');
       console.log('Sesión original:', sesionOriginal);
       console.log('Nuevo estado:', nuevoEstado);
 
-      // ✅ PRESERVAR LA FECHA ORIGINAL EXACTAMENTE
       const updateData = {
         estado: nuevoEstado,
-        // NO tocar la fecha_hora para evitar problemas de zona horaria
       };
 
       const { error } = await supabase
@@ -272,7 +485,6 @@ function App() {
 
       if (error) throw error;
 
-      // Actualizar estado local inmediatamente
       const sesionActualizada = {
         ...sesionOriginal,
         estado: nuevoEstado
@@ -280,7 +492,6 @@ function App() {
 
       actualizarSesionLocal(sesionActualizada);
 
-      // Actualizar contador de pendientes
       const hoy = new Date();
       const esPasada = new Date(sesionOriginal.fecha_hora) < hoy;
       const eraPendiente = sesionOriginal.estado === 'Pendiente';
@@ -292,23 +503,19 @@ function App() {
         setSesionsPendientes(prev => prev + 1);
       }
 
-      return true; // Éxito
+      return true;
     } catch (error) {
       console.error('Error en categorización rápida:', error);
-      return false; // Error
+      return false;
     }
   };
 
-  // ============================================================================
-  // ✅ FUNCIÓN MEJORADA - DETECCIÓN DE CAMBIOS DETALLADA
-  // ============================================================================
   const detectarCambiosPaciente = (selectedItem, formData) => {
     const cambiosInfo = {};
     const horariosEditados = [];
     const horariosNuevos = [];
     const horariosEliminados = [];
 
-    // ==================== DETECTAR CAMBIOS DE INFORMACIÓN ====================
     if (formData.nombre_apellido !== selectedItem.nombre_apellido) {
       cambiosInfo.nombre_apellido = {
         anterior: selectedItem.nombre_apellido,
@@ -351,11 +558,9 @@ function App() {
       };
     }
 
-    // ==================== DETECTAR CAMBIOS DE ESTADO ====================
     const esReactivacion = !selectedItem.activo && formData.activo;
     const esDesactivacion = selectedItem.activo && !formData.activo;
 
-    // ==================== DETECTAR CAMBIOS DETALLADOS DE HORARIOS ====================
     const horariosOriginales = (selectedItem.horarios || []).map(h => ({
       id: h.id || null,
       dia_semana: h.dia_semana,
@@ -368,21 +573,17 @@ function App() {
       hora_inicio: h.hora_inicio
     }));
 
-    // Función auxiliar para comparar horarios
     const horariosIguales = (h1, h2) => {
       return h1.dia_semana === h2.dia_semana && h1.hora_inicio === h2.hora_inicio;
     };
 
-    // Función auxiliar para obtener texto del día
     const getDiaTexto = (dia) => {
       const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       return dias[dia];
     };
 
-    // 1. DETECTAR HORARIOS ELIMINADOS (existen en original pero no en nuevo)
     horariosOriginales.forEach(horarioOriginal => {
       const existeEnNuevo = horariosNuevosForm.some(horarioNuevo => {
-        // Si tiene ID, comparar por ID; si no, comparar por contenido
         if (horarioOriginal.id && horarioNuevo.id) {
           return horarioOriginal.id === horarioNuevo.id;
         }
@@ -398,10 +599,8 @@ function App() {
       }
     });
 
-    // 2. DETECTAR HORARIOS NUEVOS (existen en nuevo pero no en original)
     horariosNuevosForm.forEach(horarioNuevo => {
       const existeEnOriginal = horariosOriginales.some(horarioOriginal => {
-        // Si tiene ID, comparar por ID; si no, comparar por contenido
         if (horarioNuevo.id && horarioOriginal.id) {
           return horarioNuevo.id === horarioOriginal.id;
         }
@@ -417,7 +616,6 @@ function App() {
       }
     });
 
-    // 3. DETECTAR HORARIOS MODIFICADOS (mismo ID pero diferente contenido)
     horariosOriginales.forEach(horarioOriginal => {
       if (horarioOriginal.id) {
         const horarioNuevoCorrespondiente = horariosNuevosForm.find(h => h.id === horarioOriginal.id);
@@ -439,7 +637,6 @@ function App() {
       }
     });
 
-    // ==================== DETERMINAR SI MOSTRAR MODAL ====================
     const hayCambiosSignificativos =
       Object.keys(cambiosInfo).length > 0 ||
       horariosEditados.length > 0 ||
@@ -447,15 +644,6 @@ function App() {
       horariosEliminados.length > 0 ||
       esReactivacion ||
       esDesactivacion;
-
-    console.log('Cambios detectados:', {
-      cambiosInfo,
-      horariosEditados,
-      horariosNuevos,
-      horariosEliminados,
-      esReactivacion,
-      esDesactivacion
-    });
 
     return {
       cambiosInfo,
@@ -465,12 +653,10 @@ function App() {
       esReactivacion,
       esDesactivacion,
       mostrarModal: hayCambiosSignificativos,
-      // Campos adicionales para compatibilidad
       hayCambiosHorarios: horariosEditados.length > 0 || horariosNuevos.length > 0 || horariosEliminados.length > 0
     };
   };
 
-  // Funciones para manejar modales
   const openModal = (type, item = null) => {
     setModalType(type);
     setSelectedItem(item);
@@ -481,20 +667,18 @@ function App() {
     setShowModal(false);
     setModalType('');
     setSelectedItem(null);
-    setFechaPrecargada(null); // ✅ Limpiar fecha pre-cargada
+    setFechaPrecargada(null);
   };
 
-  // ✅ FUNCIÓN NUEVA: Crear sesión con fecha pre-cargada desde DayDetailModal
   const handleNuevaSesionConFecha = (fechaFormateada) => {
     console.log('Creando nueva sesión con fecha pre-cargada:', fechaFormateada);
     setFechaPrecargada(fechaFormateada);
-    setShowModal(false); // Cerrar modal del día
+    setShowModal(false);
     setTimeout(() => {
       openModal('add-sesion');
-    }, 100); // Pequeño delay para que se cierre el modal del día primero
+    }, 100);
   };
 
-  // Nueva función para confirmar cambios de paciente
   const confirmarCambiosPaciente = async () => {
     try {
       setShowConfirmacionModal(false);
@@ -511,32 +695,22 @@ function App() {
     }
   };
 
-  // ============================================================================
-  // ✅ FUNCIÓN CORREGIDA PARA CANCELAR CAMBIOS
-  // ============================================================================
   const cancelarCambiosPaciente = () => {
     console.log('Cancelando cambios de paciente...');
 
-    // Limpiar estados del modal de confirmación
     setShowConfirmacionModal(false);
     setFormDataPendiente(null);
     setSelectedItemPendiente(null);
     setCambiosDetectados({});
 
-    // NO reabrir el modal de edición automáticamente
-    // El usuario puede volver a hacer clic en "Editar" si quiere
-
-    // Mostrar mensaje de cancelación (opcional)
     if (window.showToast) {
       window.showToast('Cambios cancelados', 'info', 2000);
     }
   };
 
-  // FUNCIÓN COMPLETAMENTE ACTUALIZADA - Usa las funciones SQL probadas
   const ejecutarGuardadoPaciente = async (formData, esEdicion, selectedItemParam = null) => {
     try {
       if (!esEdicion) {
-        // ============ PACIENTE NUEVO ============
         console.log('=== CREANDO PACIENTE NUEVO ===');
 
         const { data, error } = await supabase
@@ -555,7 +729,6 @@ function App() {
 
         if (error) throw error;
 
-        // Insertar horarios
         const horariosInsertados = [];
         for (const horario of formData.horarios || []) {
           const { data: horarioInsertado, error: horarioError } = await supabase
@@ -572,7 +745,6 @@ function App() {
           horariosInsertados.push(horarioInsertado);
         }
 
-        // ✅ USAR FUNCIÓN SQL PROBADA - Generar sesiones para 5 años
         if (formData.activo && horariosInsertados.length > 0) {
           console.log('Generando sesiones con función SQL...');
           const { data: resultado, error: sesionesError } = await supabase.rpc('generar_sesiones_paciente_nuevo', {
@@ -586,7 +758,6 @@ function App() {
           }
         }
 
-        // Actualizar estado local
         setPacientes(prev => [...prev, {
           ...data,
           horarios: horariosInsertados.map(h => ({
@@ -601,7 +772,6 @@ function App() {
         }
 
       } else {
-        // ============ EDITAR PACIENTE ============
         console.log('=== EDITANDO PACIENTE ===');
 
         const itemToEdit = selectedItemParam || selectedItem;
@@ -609,7 +779,6 @@ function App() {
           throw new Error('Paciente no encontrado para editar');
         }
 
-        // 1. ACTUALIZAR INFORMACIÓN BÁSICA EN TABLA
         const { error: updateError } = await supabase
           .from('pacientes')
           .update({
@@ -625,12 +794,10 @@ function App() {
 
         if (updateError) throw updateError;
 
-        // 2. DETECTAR CAMBIOS
         const cambiosPrecio = formData.precio_por_hora !== itemToEdit.precio_por_hora;
         const esReactivacion = !itemToEdit.activo && formData.activo;
         const esDesactivacion = itemToEdit.activo && !formData.activo;
 
-        // Detectar cambios en horarios
         const horariosAntes = JSON.stringify((itemToEdit.horarios || []).map(h =>
           ({ dia_semana: h.dia_semana, hora_inicio: h.hora_inicio })
         ).sort());
@@ -639,16 +806,7 @@ function App() {
         ).sort());
         const hayCambiosHorarios = horariosAntes !== horariosAhora;
 
-        console.log('Cambios detectados:', {
-          precio: cambiosPrecio,
-          reactivacion: esReactivacion,
-          desactivacion: esDesactivacion,
-          horarios: hayCambiosHorarios
-        });
-
-        // 3. ✅ MANEJAR DESACTIVACIÓN CON FUNCIÓN SQL PROBADA
         if (esDesactivacion) {
-          console.log('Desactivando paciente...');
           const { data: resultado, error: inactivarError } = await supabase.rpc('inactivar_paciente_completo', {
             p_paciente_id: itemToEdit.id
           });
@@ -660,15 +818,8 @@ function App() {
           }
         }
 
-        // 4. ✅ MANEJAR REACTIVACIÓN CON FUNCIÓN SQL PROBADA
         if (esReactivacion) {
-          console.log('Reactivando paciente...');
-
-          // Primero actualizar horarios si es necesario
           if (hayCambiosHorarios) {
-            console.log('Actualizando horarios en reactivación...');
-            console.log('formData.horarios:', formData.horarios);
-
             const { data: resultadoHorarios, error: horariosError } = await supabase.rpc('gestionar_horarios_paciente', {
               p_paciente_id: itemToEdit.id,
               p_horarios_json: formData.horarios || [],
@@ -677,30 +828,19 @@ function App() {
 
             if (horariosError) {
               console.error('Error actualizando horarios:', horariosError);
-            } else {
-              console.log('✅ Horarios actualizados:', resultadoHorarios);
             }
           }
 
-          // Reactivar y generar sesiones futuras
           const { data: resultado, error: reactivarError } = await supabase.rpc('reactivar_paciente_completo', {
             p_paciente_id: itemToEdit.id
           });
 
           if (reactivarError) {
             console.error('Error reactivando:', reactivarError);
-          } else {
-            console.log('✅ Resultado reactivación:', resultado);
           }
         }
 
-        // 5. ✅ MANEJAR CAMBIOS DE HORARIOS (paciente activo) CON FUNCIÓN SQL PROBADA
         if (hayCambiosHorarios && formData.activo && !esReactivacion) {
-          console.log('Actualizando horarios...');
-          console.log('formData.horarios:', formData.horarios);
-          console.log('tipo:', typeof formData.horarios);
-
-          // Pasar array directamente, Supabase lo convierte a JSON automáticamente
           const { data: resultado, error: horariosError } = await supabase.rpc('gestionar_horarios_paciente', {
             p_paciente_id: itemToEdit.id,
             p_horarios_json: formData.horarios || [],
@@ -709,14 +849,10 @@ function App() {
 
           if (horariosError) {
             console.error('Error gestionando horarios:', horariosError);
-          } else {
-            console.log('✅ Resultado gestión horarios:', resultado);
           }
         }
 
-        // 6. MANEJAR CAMBIOS DE PRECIO (solo si no hay otros cambios mayores)
         if (cambiosPrecio && !esReactivacion && !esDesactivacion && !hayCambiosHorarios) {
-          console.log('Actualizando solo precios...');
           const { data: resultado, error: preciosError } = await supabase.rpc('actualizar_precios_futuros_paciente', {
             p_paciente_id: itemToEdit.id,
             p_nuevo_precio: formData.precio_por_hora
@@ -724,12 +860,9 @@ function App() {
 
           if (preciosError) {
             console.error('Error actualizando precios:', preciosError);
-          } else {
-            console.log(`✅ ${resultado} sesiones con precios actualizados`);
           }
         }
 
-        // 7. ACTUALIZAR ESTADO LOCAL
         const pacienteActualizado = {
           ...itemToEdit,
           ...formData,
@@ -745,7 +878,6 @@ function App() {
         }
       }
 
-      // Recargar sesiones para ver los cambios
       await loadSesiones();
       closeModal();
 
@@ -755,44 +887,6 @@ function App() {
     }
   };
 
-  // ============================================================================
-  // ✅ FUNCIÓN CORREGIDA PARA MANEJO DE FECHAS EN EDICIÓN DE SESIONES
-  // ============================================================================
-  const corregirFechaHora = (fechaHoraInput, fechaHoraOriginal) => {
-    // Si no hay input, usar la original
-    if (!fechaHoraInput) return fechaHoraOriginal;
-
-    try {
-      // Si el input viene en formato datetime-local (sin Z)
-      if (typeof fechaHoraInput === 'string' && !fechaHoraInput.includes('Z') && !fechaHoraInput.includes('+')) {
-        // Agregar zona horaria local para evitar conversión UTC
-        const fechaLocal = new Date(fechaHoraInput);
-
-        // Obtener el offset de zona horaria en minutos
-        const offsetMinutes = fechaLocal.getTimezoneOffset();
-
-        // Ajustar por la diferencia de zona horaria
-        const fechaCorregida = new Date(fechaLocal.getTime() - (offsetMinutes * 60000));
-
-        console.log('=== CORRECCIÓN DE FECHA ===');
-        console.log('Input original:', fechaHoraInput);
-        console.log('Fecha original:', fechaHoraOriginal);
-        console.log('Fecha local:', fechaLocal);
-        console.log('Offset minutos:', offsetMinutes);
-        console.log('Fecha corregida:', fechaCorregida.toISOString());
-
-        return fechaCorregida.toISOString();
-      }
-
-      // Si ya tiene zona horaria, usar tal como viene
-      return new Date(fechaHoraInput).toISOString();
-    } catch (error) {
-      console.error('Error corrigiendo fecha:', error);
-      return fechaHoraOriginal; // En caso de error, usar la original
-    }
-  };
-
-  // Función para manejar otros tipos de guardado (supervisoras, sesiones, etc.)
   const ejecutarGuardadoOtrosTipos = async (formData) => {
     if (modalType === 'add-supervisora') {
       const { data, error } = await supabase
@@ -808,16 +902,6 @@ function App() {
         window.showToast(`Supervisora ${data.nombre_apellido} agregada exitosamente`, 'success');
       }
 
-      try {
-        await supabase.rpc('actualizar_precios_futuros_supervisora', {
-          p_supervisora_id: data.id,
-          p_nuevo_precio: formData.precio_por_hora
-        });
-        loadSesiones();
-      } catch (rpcError) {
-        console.warn('Error estableciendo precios para nueva supervisora:', rpcError);
-      }
-
     } else if (modalType === 'edit-supervisora') {
       const { error } = await supabase
         .from('supervisoras')
@@ -830,22 +914,19 @@ function App() {
         s.id === selectedItem.id ? { ...s, ...formData } : s
       ));
 
-      try {
-        await supabase.rpc('actualizar_precios_futuros_supervisora', {
-          p_supervisora_id: selectedItem.id,
-          p_nuevo_precio: formData.precio_por_hora
-        });
-        await loadSesiones();
-      } catch (rpcError) {
-        console.error('Error actualizando precios futuros de supervisión:', rpcError);
-      }
-
     } else if (modalType === 'add-sesion') {
+      console.log('=== CREANDO NUEVA SESIÓN ===');
+      console.log('FormData recibido:', formData);
+
       const sesionData = {
         ...formData,
+        fecha_hora: convertirFechaParaGuardar(formData.fecha_hora),
         auto_generada: false,
-        modificada_manualmente: false
+        modificada_manualmente: false,
+        eliminado: false
       };
+
+      console.log('Datos finales para insertar:', sesionData);
 
       const { data, error } = await supabase
         .from('sesiones')
@@ -854,6 +935,7 @@ function App() {
         .single();
 
       if (error) throw error;
+
       setSesiones(prev => [...prev, data]);
 
       if (window.showToast) {
@@ -861,28 +943,21 @@ function App() {
       }
 
     } else if (modalType === 'edit-sesion') {
-      const fechaOriginal = new Date(selectedItem.fecha_hora);
+      console.log('=== EDITANDO SESIÓN ===');
 
-      // ✅ CORRECCIÓN CRÍTICA: Usar función para corregir fecha
-      const fechaHoraCorregida = corregirFechaHora(formData.fecha_hora, selectedItem.fecha_hora);
-      const fechaNueva = new Date(fechaHoraCorregida);
+      const fechaConvertida = convertirFechaParaGuardar(formData.fecha_hora);
+      const fechaOriginal = selectedItem.fecha_hora;
 
-      const seCambioFechaHora = Math.abs(fechaOriginal.getTime() - fechaNueva.getTime()) > 60000; // Tolerancia de 1 minuto
+      const fechaOrg = new Date(fechaOriginal);
+      const fechaNueva = new Date(fechaConvertida);
+      const diferencia = Math.abs(fechaNueva.getTime() - fechaOrg.getTime());
+      const seCambioFechaHora = diferencia > 60000;
 
       const updateData = {
         ...formData,
-        fecha_hora: fechaHoraCorregida, // ✅ Usar fecha corregida
-        // CRÍTICO: Marcar como modificada manualmente si se cambió fecha/hora
+        fecha_hora: fechaConvertida,
         modificada_manualmente: seCambioFechaHora ? true : (selectedItem.modificada_manualmente || false)
       };
-
-      console.log('=== DEBUG EDICIÓN SESIÓN ===');
-      console.log('Fecha original:', fechaOriginal);
-      console.log('FormData fecha_hora:', formData.fecha_hora);
-      console.log('Fecha corregida:', fechaHoraCorregida);
-      console.log('Fecha nueva:', fechaNueva);
-      console.log('Se cambió fecha/hora:', seCambioFechaHora);
-      console.log('UpdateData final:', updateData);
 
       const { error } = await supabase
         .from('sesiones')
@@ -891,7 +966,6 @@ function App() {
 
       if (error) throw error;
 
-      // ✅ ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
       setSesiones(prev => prev.map(s =>
         s.id === selectedItem.id ? { ...s, ...updateData } : s
       ));
@@ -917,7 +991,6 @@ function App() {
     closeModal();
   };
 
-  // Función para manejar errores
   const handleError = (error) => {
     let errorMessage = 'Error al guardar los datos';
     if (error.message) {
@@ -929,47 +1002,43 @@ function App() {
     alert(errorMessage);
   };
 
-  // FUNCIÓN ACTUALIZADA - Simplificada
+  // FUNCIÓN PRINCIPAL CON VALIDACIÓN DE CONFLICTOS
   const handleModalSave = async (formData) => {
     try {
-      console.log('Guardando:', { modalType, formData });
+      console.log('Guardando con verificación de conflictos:', { modalType, formData });
 
-      if (modalType === 'add-paciente') {
-        // Nuevo paciente - directo
-        await ejecutarGuardadoPaciente(formData, false);
+      // Validar conflictos solo para sesiones
+      if (modalType === 'add-sesion' || modalType === 'edit-sesion') {
+        const fechaHoraParaValidar = convertirFechaParaGuardar(formData.fecha_hora);
+        const excluirId = modalType === 'edit-sesion' ? selectedItem?.id : null;
 
-      } else if (modalType === 'edit-paciente') {
-        // Editar paciente
-        const cambios = detectarCambiosPaciente(selectedItem, formData);
+        console.log('Validando conflicto para sesión...');
+        const resultadoConflicto = await verificarConflictoHorario(
+          fechaHoraParaValidar,
+          formData.duracion_horas || 1.0,
+          excluirId
+        );
 
-        if (cambios.mostrarModal) {
-          // Mostrar modal de confirmación
-          setCambiosDetectados(cambios);
-          setFormDataPendiente(formData);
-          setSelectedItemPendiente(selectedItem);
-          setShowModal(false);
-          setShowConfirmacionModal(true);
+        if (resultadoConflicto && resultadoConflicto.hayConflicto) {
+          console.log('⚠️ Conflicto detectado:', resultadoConflicto);
+
+          setConflictoDetectado(resultadoConflicto);
+          setSesionConConflicto(formData);
+          setShowConflictoModal(true);
           return;
-        } else {
-          // Sin cambios significativos - guardar directamente
-          await ejecutarGuardadoPaciente(formData, true);
         }
-
-      } else {
-        // Otros tipos (supervisoras, sesiones)
-        await ejecutarGuardadoOtrosTipos(formData);
       }
 
+      await procederConGuardadoNormal(formData);
+
     } catch (error) {
-      console.error('Error saving data:', error);
+      console.error('Error en guardado con validación de conflictos:', error);
       handleError(error);
     }
   };
 
-  // Función para eliminar sesión con undo (soft delete)
   const handleEliminarSesion = async (sesion) => {
     try {
-      // Marcar como eliminado en la base de datos
       const { error } = await supabase
         .from('sesiones')
         .update({ eliminado: true })
@@ -977,22 +1046,18 @@ function App() {
 
       if (error) throw error;
 
-      // Eliminar del estado local
       setSesiones(prev => prev.filter(s => s.id !== sesion.id));
 
-      // Actualizar contador de pendientes si era pendiente
       if (sesion.estado === 'Pendiente' && new Date(sesion.fecha_hora) < new Date()) {
         setSesionsPendientes(prev => Math.max(0, prev - 1));
       }
 
-      // Mostrar toast con opción de deshacer
       if (window.showToast) {
         window.showToast(
           `Sesión de ${sesion.tipo_sesion} eliminada`,
           'success',
           5000,
           async () => {
-            // Función de undo
             try {
               const { error: undoError } = await supabase
                 .from('sesiones')
@@ -1001,7 +1066,6 @@ function App() {
 
               if (undoError) throw undoError;
 
-              // Recargar sesiones para mostrar la restaurada
               await loadSesiones();
 
               if (window.showToast) {
@@ -1009,9 +1073,6 @@ function App() {
               }
             } catch (undoError) {
               console.error('Error al deshacer:', undoError);
-              if (window.showToast) {
-                window.showToast('Error al restaurar la sesión', 'error');
-              }
             }
           }
         );
@@ -1025,11 +1086,8 @@ function App() {
     }
   };
 
-  // Función para manejar categorización masiva
   const handleCategorizacionMasiva = async (cambios) => {
     try {
-      console.log('Recibiendo cambios:', cambios);
-
       for (const cambio of cambios) {
         const { error } = await supabase
           .from('sesiones')
@@ -1040,16 +1098,13 @@ function App() {
           console.error('Error updating session:', cambio.id, error);
           throw error;
         }
-        console.log('Sesión actualizada:', cambio.id, 'a estado:', cambio.estado);
       }
 
-      // Actualizar estado local
       setSesiones(prev => prev.map(sesion => {
         const cambio = cambios.find(c => c.id === sesion.id);
         return cambio ? { ...sesion, estado: cambio.estado } : sesion;
       }));
 
-      // Recalcular sesiones pendientes
       const hoy = new Date();
       const nuevasPendientes = sesiones.filter(s => {
         const cambio = cambios.find(c => c.id === s.id);
@@ -1059,15 +1114,12 @@ function App() {
 
       setSesionsPendientes(Math.max(0, nuevasPendientes - cambios.length));
 
-      console.log('Categorización completada exitosamente');
-
     } catch (error) {
       console.error('Error al categorizar sesiones:', error);
       alert('Error al categorizar sesiones: ' + error.message);
     }
   };
 
-  // Función para recargar sesiones
   const loadSesiones = async () => {
     try {
       const fechaInicio = new Date();
@@ -1083,7 +1135,6 @@ function App() {
       if (error) throw error;
       setSesiones(data || []);
 
-      // Recalcular pendientes (solo no eliminadas)
       const pendientes = (data || []).filter(s =>
         s.estado === 'Pendiente' && new Date(s.fecha_hora) < new Date() && !s.eliminado
       ).length;
@@ -1094,7 +1145,6 @@ function App() {
     }
   };
 
-  // Renderizar vista actual
   const renderCurrentView = () => {
     switch (activeView) {
       case 'calendario':
@@ -1179,14 +1229,12 @@ function App() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-purple-50">
         <div className="text-center p-8">
           <div className="relative mb-8">
-            {/* Logo o icono principal */}
             <div className="w-24 h-24 mx-auto mb-4 relative">
               <img
                 src="/jel.png"
                 alt="JEL Organizador"
                 className="w-full h-full object-contain"
                 onError={(e) => {
-                  // Fallback si no encuentra el logo
                   e.target.style.display = 'none';
                   e.target.nextElementSibling.style.display = 'flex';
                 }}
@@ -1195,17 +1243,11 @@ function App() {
                 JEL
               </div>
             </div>
-
-            {/* Spinner animado */}
             <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-6"></div>
           </div>
-
-          {/* Texto de carga */}
           <h1 className="text-3xl font-bold text-gray-800 mb-2">JEL Organizador</h1>
           <p className="text-lg text-purple-600 font-medium mb-4">Cargando sistema...</p>
           <p className="text-sm text-gray-500">Preparando sesiones, pacientes y facturación</p>
-
-          {/* Barra de progreso animada */}
           <div className="w-64 h-2 bg-gray-200 rounded-full mx-auto mt-6 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-purple-500 to-purple-700 rounded-full animate-pulse"></div>
           </div>
@@ -1216,7 +1258,6 @@ function App() {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-purple-50 via-white to-purple-50">
-      {/* Sidebar Fija */}
       <Sidebar
         activeView={activeView}
         setActiveView={setActiveView}
@@ -1229,9 +1270,7 @@ function App() {
         alquilerConfig={alquilerConfig}
       />
 
-      {/* Contenido principal con margen para sidebar fija */}
       <div className="main-content-adjusted flex-1 flex flex-col min-h-screen">
-        {/* Header simplificado - SIN botones del calendario */}
         <Header
           activeView={activeView}
           pacientes={pacientes}
@@ -1239,13 +1278,11 @@ function App() {
           currentDate={new Date()}
         />
 
-        {/* Vista principal */}
         <main className="flex-1 p-6 overflow-y-auto">
           {renderCurrentView()}
         </main>
       </div>
 
-      {/* Modal principal */}
       <Modal
         isOpen={showModal && modalType !== 'categorizar-sesiones' && modalType !== 'day-detail'}
         onClose={closeModal}
@@ -1256,10 +1293,9 @@ function App() {
         onSave={handleModalSave}
         currencyMode={currencyMode}
         tipoCambio={tipoCambio}
-        fechaPrecargada={fechaPrecargada}  // ✅ NUEVA PROP para pre-cargar fecha
+        fechaPrecargada={fechaPrecargada}
       />
 
-      {/* Modal de categorización */}
       <CategorizarModal
         isOpen={showModal && modalType === 'categorizar-sesiones'}
         onClose={closeModal}
@@ -1271,7 +1307,6 @@ function App() {
         tipoCambio={tipoCambio}
       />
 
-      {/* ✅ Modal de detalle del día CON FUNCIÓN DE CATEGORIZACIÓN RÁPIDA Y NUEVA SESIÓN */}
       <DayDetailModal
         isOpen={showModal && modalType === 'day-detail'}
         onClose={closeModal}
@@ -1281,13 +1316,12 @@ function App() {
         supervisoras={supervisoras}
         onEditarSesion={(sesion) => openModal('edit-sesion', sesion)}
         onEliminarSesion={handleEliminarSesion}
-        onCategorizarSesion={handleCategorizarSesionRapida}  // ✅ FUNCIÓN CORREGIDA
-        onNuevaSesion={handleNuevaSesionConFecha}  // ✅ NUEVA PROP
+        onCategorizarSesion={handleCategorizarSesionRapida}
+        onNuevaSesion={handleNuevaSesionConFecha}
         currencyMode={currencyMode}
         tipoCambio={tipoCambio}
       />
 
-      {/* Modal de confirmación de cambios */}
       <ConfirmacionCambiosModal
         isOpen={showConfirmacionModal}
         onClose={cancelarCambiosPaciente}
@@ -1296,7 +1330,14 @@ function App() {
         pacienteNombre={selectedItemPendiente?.nombre_apellido || ''}
       />
 
-      {/* Sistema de Notificaciones */}
+      <ConflictoHorarioModal
+        isOpen={showConflictoModal}
+        onClose={cancelarCreacionPorConflicto}
+        onConfirmar={confirmarCreacionConConflicto}
+        conflictoDetectado={conflictoDetectado}
+        sesionNueva={sesionConConflicto}
+      />
+
       <ToastSystem />
     </div>
   );

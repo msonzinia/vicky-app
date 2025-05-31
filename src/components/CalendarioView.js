@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
 const CalendarioView = ({
   sesiones,
@@ -11,6 +11,7 @@ const CalendarioView = ({
   onEliminarSesion
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [isReloading, setIsReloading] = useState(false);
 
   // Funciones de utilidad
   const formatCurrency = (amount, currency = currencyMode) => {
@@ -22,6 +23,21 @@ const CalendarioView = ({
 
   const getPacienteById = (id) => pacientes.find(p => p.id === id);
   const getSupervisoraById = (id) => supervisoras.find(s => s.id === id);
+
+  // ✅ FUNCIÓN NUEVA: Reload de la página
+  const handleReloadPage = () => {
+    setIsReloading(true);
+
+    // Mostrar feedback visual
+    if (window.showToast) {
+      window.showToast('🔄 Recargando calendario...', 'info', 2000);
+    }
+
+    // Reload después de un pequeño delay para mostrar el feedback
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
 
   // Contar sesiones pendientes
   const sesionsPendientes = sesiones.filter(s =>
@@ -146,8 +162,9 @@ const CalendarioView = ({
                 <div className="session-content">
                   <span className="session-icon">{getSessionIcon(sesion)}</span>
                   <span className="session-time">{hora}</span>
+                  {/* ✅ CAMBIO: Mostrar nombre completo en lugar de solo el primer nombre */}
                   <span className="session-name">
-                    {persona?.nombre_apellido?.split(' ')[0] || 'Sin asignar'}
+                    {persona?.nombre_apellido || 'Sin asignar'}
                   </span>
                   {isPending && <span className="session-warning">!</span>}
                 </div>
@@ -208,6 +225,17 @@ const CalendarioView = ({
 
           {/* Botones de acción */}
           <div className="flex gap-3">
+            {/* ✅ BOTÓN DE RELOAD */}
+            <button
+              onClick={handleReloadPage}
+              disabled={isReloading}
+              className={`px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm flex items-center gap-2 ${isReloading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Recargar calendario"
+            >
+              <RefreshCw size={16} className={isReloading ? 'animate-spin' : ''} />
+              {isReloading ? 'Recargando...' : 'Recargar'}
+            </button>
+
             <button
               onClick={goToToday}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm"
@@ -278,6 +306,7 @@ const CalendarioView = ({
                     className="w-3 h-3 rounded"
                     style={{ backgroundColor: paciente.color }}
                   ></div>
+                  {/* ✅ CAMBIO: Mostrar nombre completo también en leyenda */}
                   <span>{paciente.nombre_apellido}</span>
                 </div>
               ))}
