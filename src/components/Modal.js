@@ -274,21 +274,39 @@ const Modal = ({
 
     // Para sesiones, asegurar que solo uno de paciente_id o supervisora_id esté presente
     if (type.includes('sesion')) {
+      // 🔧 CORRECCIÓN: Limpiar lógica de IDs según tipo de sesión
       if (cleanFormData.tipo_sesion === 'Supervisión') {
+        // Supervisión: Solo supervisora, sin paciente
         cleanFormData.paciente_id = null;
+        cleanFormData.supervisora_acompanante_id = null;
+        cleanFormData.acompañado_supervisora = false;
+
         if (!cleanFormData.supervisora_id) {
           alert('Debe seleccionar una supervisora');
           return;
         }
       } else {
+        // Todos los demás tipos: Tienen paciente, sin supervisora principal
         cleanFormData.supervisora_id = null;
+
         if (!cleanFormData.paciente_id) {
           alert('Debe seleccionar un paciente');
           return;
         }
+
+        // 🔧 CORRECCIÓN: Manejar acompañamiento correctamente
+        if (!tiposConAcompanamiento.includes(cleanFormData.tipo_sesion)) {
+          // Si el tipo NO permite acompañamiento, limpiar campos
+          cleanFormData.acompañado_supervisora = false;
+          cleanFormData.supervisora_acompanante_id = null;
+        } else if (!cleanFormData.acompañado_supervisora) {
+          // Si permite acompañamiento pero no está marcado, limpiar supervisora acompañante
+          cleanFormData.supervisora_acompanante_id = null;
+        }
+        // Si está marcado Y el tipo lo permite, mantener supervisora_acompanante_id
       }
 
-      // Convertir fecha a formato ISO si es necesario
+      // 🔧 CORRECCIÓN: NO convertir fecha si ya viene en formato correcto
       if (cleanFormData.fecha_hora && !cleanFormData.fecha_hora.includes('T')) {
         cleanFormData.fecha_hora = new Date(cleanFormData.fecha_hora).toISOString();
       }
@@ -296,7 +314,6 @@ const Modal = ({
       // Asegurar que los números son números
       cleanFormData.precio_por_hora = parseFloat(cleanFormData.precio_por_hora);
       cleanFormData.duracion_horas = parseFloat(cleanFormData.duracion_horas);
-
       // ✅ Limpiar campos de acompañamiento si no aplican
       if (!tiposConAcompanamiento.includes(cleanFormData.tipo_sesion)) {
         cleanFormData.acompañado_supervisora = false;
@@ -320,7 +337,19 @@ const Modal = ({
     console.log('Sending clean data:', cleanFormData);
     onSave(cleanFormData);
     onClose();
+
+    console.log('🧪 DEBUGGING - Datos limpios que se envían:', {
+      tipo_sesion: cleanFormData.tipo_sesion,
+      paciente_id: cleanFormData.paciente_id,
+      supervisora_id: cleanFormData.supervisora_id,
+      supervisora_acompanante_id: cleanFormData.supervisora_acompanante_id,
+      acompañado_supervisora: cleanFormData.acompañado_supervisora,
+      fecha_hora: cleanFormData.fecha_hora
+    });
+
   };
+
+
 
   if (!isOpen) return null;
 

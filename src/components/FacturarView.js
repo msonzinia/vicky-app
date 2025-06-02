@@ -11,7 +11,7 @@ const FacturarView = ({
   openModal
 }) => {
   const [loading, setLoading] = useState(true);
-  const [mesSeleccionado, setMesSeleccionado] = useState(new Date());
+  const [mesSeleccionado, setMesSeleccionado] = useState(null);
   const [datosFacturacion, setDatosFacturacion] = useState({
     entradas: {
       pendientes: [],
@@ -24,23 +24,44 @@ const FacturarView = ({
     alertas: []
   });
 
-  // Determinar mes por defecto (actual o anterior si estamos en los primeros 6 días)
+  // Determinar mes por defecto (actual o anterior si estamos en los primeros 9 días)
   useEffect(() => {
     const hoy = new Date();
     const diaDelMes = hoy.getDate();
 
-    if (diaDelMes <= 6) {
+    console.log('🗓️ Configurando mes por defecto:', {
+      fechaHoy: hoy.toISOString().split('T')[0],
+      diaDelMes,
+      logica: diaDelMes <= 9 ? 'Mostrar mes anterior' : 'Mostrar mes actual'
+    });
+
+    if (diaDelMes <= 9) {
       const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+      console.log('📅 Seleccionando mes anterior:', mesAnterior.toISOString().split('T')[0]);
       setMesSeleccionado(mesAnterior);
     } else {
-      setMesSeleccionado(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+      const mesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      console.log('📅 Seleccionando mes actual:', mesActual.toISOString().split('T')[0]);
+      setMesSeleccionado(mesActual);
     }
   }, []);
 
   // Cargar datos cuando cambia el mes
   useEffect(() => {
-    if (mesSeleccionado) {
+    console.log('🔄 useEffect cargarDatos disparado:', {
+      mesSeleccionado: mesSeleccionado?.toISOString().split('T')[0],
+      pacientesLength: pacientes?.length,
+      supervisorasLength: supervisoras?.length
+    });
+
+    if (mesSeleccionado && pacientes?.length > 0) {
+      console.log('✅ Condiciones cumplidas, cargando datos...');
       cargarDatosFacturacion();
+    } else {
+      console.log('❌ Condiciones no cumplidas, esperando...', {
+        tieneMes: !!mesSeleccionado,
+        tienePacientes: pacientes?.length > 0
+      });
     }
   }, [mesSeleccionado, pacientes, supervisoras]);
 
@@ -50,39 +71,47 @@ const FacturarView = ({
 
       const year = mesSeleccionado.getFullYear();
       const month = mesSeleccionado.getMonth() + 1;
-
-      const inicioMes = new Date(year, month - 1, 1);
-      const finMes = new Date(year, month, 0, 23, 59, 59);
       const hoy = new Date();
 
       console.log('Cargando datos para:', {
         año: year,
-        mes: month,
-        inicioMes: inicioMes.toISOString(),
-        finMes: finMes.toISOString()
+        mes: month
       });
 
-      // 1. Cargar sesiones del mes
+      // 1. 🚀 NUEVA LÓGICA: Usar la view de Supabase para pacientes
+      const { data: resumenesView, error: viewError } = await supabase
+        .from('resumen_facturacion_mensual')
+        .select('*')
+        .eq('año', year)
+        .eq('mes', month)
+        .order('nombre_apellido');
+
+      if (viewError) throw viewError;
+
+      console.log('📊 Datos desde view pacientes:', resumenesView);
+
+      // 2. Verificar sesiones pendientes de categorizar (para alertas)
+      const inicioMes = new Date(year, month - 1, 1);
+      const finMes = new Date(year, month, 0, 23, 59, 59);
+
       const { data: sesiones, error: sesionesError } = await supabase
         .from('sesiones')
         .select('*')
         .eq('eliminado', false)
         .gte('fecha_hora', inicioMes.toISOString())
-        .lte('fecha_hora', finMes.toISOString())
-        .order('fecha_hora');
+        .lte('fecha_hora', finMes.toISOString());
 
       if (sesionesError) throw sesionesError;
 
-      // 2. Verificar sesiones pendientes de categorizar
       const sesionsPendientesPasadas = (sesiones || []).filter(s =>
         s.estado === 'Pendiente' && new Date(s.fecha_hora) < hoy
       );
 
-      // 3. Procesar entradas por paciente
-      const entradasPorPaciente = await procesarEntradas(sesiones || [], year, month, hoy);
+      // 3. Procesar entradas usando la view
+      const entradasPorPaciente = await procesarEntradasConView(resumenesView || [], year, month);
 
-      // 4. Procesar salidas
-      const salidasData = await procesarSalidas(sesiones || [], inicioMes, finMes);
+      // 4. 🚀 NUEVA LÓGICA: Procesar salidas usando la view de supervisoras
+      const salidasData = await procesarSalidasConView(year, month);
 
       // 5. Generar alertas
       const alertas = [];
@@ -122,74 +151,93 @@ const FacturarView = ({
     }
   };
 
-  const procesarEntradas = async (sesiones, año, mes, hoy) => {
+  // Procesar entradas usando la view (sin cambios)
+  const procesarEntradasConView = async (resumenesView, año, mes) => {
     const entradasPorPaciente = [];
     const entradasPagadas = [];
 
-    for (const paciente of pacientes.filter(p => p.activo && !p.eliminado)) {
-      // Sesiones del paciente en el mes
-      const sesionesPaciente = sesiones.filter(s =>
-        s.paciente_id === paciente.id &&
-        !['Cancelada', 'Cancelada con antelación', 'Cancelada por mí'].includes(s.estado)
-      );
+    for (const resumen of resumenesView) {
+      // Solo procesar si hay actividad en el mes o saldo anterior
+      if (resumen.total_mes_actual <= 0 && resumen.saldo_anterior <= 0) {
+        continue;
+      }
 
-      if (sesionesPaciente.length === 0) continue;
+      // Encontrar datos del paciente
+      const paciente = pacientes.find(p => p.id === resumen.paciente_id);
+      if (!paciente) {
+        console.warn('Paciente no encontrado:', resumen.paciente_id);
+        continue;
+      }
 
-      // Agrupar por tipo de sesión
-      const sesionesRegulares = sesionesPaciente.filter(s => s.tipo_sesion === 'Sesión');
-      const evaluaciones = sesionesPaciente.filter(s => s.tipo_sesion === 'Evaluación');
-      const reevaluaciones = sesionesPaciente.filter(s => s.tipo_sesion === 'Re-evaluación');
-
-      // Calcular totales del mes
-      const totalSesiones = sesionesRegulares.reduce((sum, s) =>
-        sum + (s.precio_por_hora * s.duracion_horas), 0);
-      const totalEvaluaciones = evaluaciones.reduce((sum, s) =>
-        sum + (s.precio_por_hora * s.duracion_horas), 0);
-      const totalReevaluaciones = reevaluaciones.reduce((sum, s) =>
-        sum + (s.precio_por_hora * s.duracion_horas), 0);
-
-      const totalMes = totalSesiones + totalEvaluaciones + totalReevaluaciones;
-
-      // NUEVA LÓGICA: Usar saldo total hasta el mes
-      let saldoTotalHastaMes = 0;
-      let seguimiento = null;
-
-      try {
-        // Calcular saldo total hasta este mes (incluye pagos de cualquier fecha)
-        const { data: saldoData, error: saldoError } = await supabase
-          .rpc('calcular_saldo_total_hasta_mes', {
-            p_paciente_id: paciente.id,
-            p_año: año,
-            p_mes: mes
-          });
-
-        if (!saldoError && saldoData !== null) {
-          saldoTotalHastaMes = saldoData;
+      // Construir objeto de sesiones con la estructura esperada
+      const sesiones = {
+        regulares: {
+          cantidad: resumen.cantidad_sesiones,
+          total: resumen.monto_sesiones,
+          horas: resumen.horas_sesiones,
+          items: []
+        },
+        evaluaciones: {
+          cantidad: resumen.cantidad_evaluaciones,
+          total: resumen.monto_evaluaciones,
+          horas: resumen.horas_evaluaciones,
+          items: []
+        },
+        reevaluaciones: {
+          cantidad: resumen.cantidad_reevaluaciones,
+          total: resumen.monto_reevaluaciones,
+          horas: resumen.horas_reevaluaciones,
+          items: []
+        },
+        devoluciones: {
+          cantidad: resumen.cantidad_devoluciones,
+          total: resumen.monto_devoluciones,
+          horas: resumen.horas_devoluciones,
+          items: []
+        },
+        reuniones_colegio: {
+          cantidad: resumen.cantidad_reuniones_colegio,
+          total: resumen.monto_reuniones_colegio,
+          horas: resumen.horas_reuniones_colegio,
+          items: []
+        },
+        supervisiones: {
+          cantidad: resumen.cantidad_supervisiones,
+          total: resumen.monto_supervisiones,
+          horas: resumen.horas_supervisiones,
+          items: []
         }
+      };
 
-        // Obtener o crear registro de seguimiento
-        seguimiento = await obtenerSeguimiento(paciente.id, año, mes, Math.max(saldoTotalHastaMes, totalMes));
-
+      // Obtener seguimiento de facturación
+      let seguimiento = null;
+      try {
+        seguimiento = await obtenerSeguimiento(resumen.paciente_id, año, mes, resumen.total_final);
       } catch (error) {
-        console.error('Error calculando saldo total:', error);
+        console.error('Error obteniendo seguimiento:', error);
       }
 
       const entrada = {
         paciente,
-        sesiones: {
-          regulares: { cantidad: sesionesRegulares.length, total: totalSesiones, items: sesionesRegulares },
-          evaluaciones: { cantidad: evaluaciones.length, total: totalEvaluaciones, items: evaluaciones },
-          reevaluaciones: { cantidad: reevaluaciones.length, total: totalReevaluaciones, items: reevaluaciones }
-        },
-        totalMes,
-        saldoTotalHastaMes,
-        seguimiento
+        sesiones,
+        totalMes: resumen.total_mes_actual,
+        saldoAnterior: resumen.saldo_anterior,
+        saldoTotalHastaMes: resumen.total_final,
+        totalFinal: resumen.total_final,
+        sesiones_futuras_incluidas: resumen.sesiones_futuras_incluidas,
+        seguimiento,
+
+        // Info de debug
+        debug: {
+          sesiones_anteriores: resumen.debug_sesiones_anteriores,
+          pagos_totales: resumen.debug_pagos_totales
+        }
       };
 
-      // NUEVO: Separar entre pendientes y pagados
+      // Separar entre pendientes y pagados
       if (seguimiento && seguimiento.completamente_pagado) {
         entradasPagadas.push(entrada);
-      } else if (saldoTotalHastaMes > 0) {
+      } else if (resumen.total_final > 0) {
         entradasPorPaciente.push(entrada);
       }
     }
@@ -197,10 +245,127 @@ const FacturarView = ({
     return { pendientes: entradasPorPaciente, pagados: entradasPagadas };
   };
 
+  // 🚀 NUEVA FUNCIÓN: Procesar salidas usando la view de supervisoras
+  const procesarSalidasConView = async (año, mes) => {
+    try {
+      console.log('💰 Procesando gastos con view para:', { año, mes });
+
+      // 1. Calcular alquiler (lógica original)
+      const fechaInicioAlquiler = new Date('2025-05-01');
+      const mesActual = new Date(mesSeleccionado.getFullYear(), mesSeleccionado.getMonth(), 1);
+
+      let mesesAlquiler = 0;
+      if (mesActual >= fechaInicioAlquiler) {
+        const diffTime = mesActual.getTime() - fechaInicioAlquiler.getTime();
+        mesesAlquiler = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44)) + 1;
+      }
+
+      const totalAlquilerAdeudado = mesesAlquiler * (alquilerConfig?.precio_mensual || 0);
+
+      const { data: pagosAlquiler } = await supabase
+        .from('pagos_hechos')
+        .select('monto_ars')
+        .eq('concepto', 'Alquiler')
+        .eq('eliminado', false);
+
+      const totalAlquilerPagado = (pagosAlquiler || []).reduce((sum, p) => sum + p.monto_ars, 0);
+      const alquilerPendiente = totalAlquilerAdeudado - totalAlquilerPagado;
+
+      // 2. 🚀 NUEVO: Usar la view de supervisoras
+      const { data: resumenSupervisoras, error: supervisorasError } = await supabase
+        .from('resumen_gastos_supervisoras_mensual')
+        .select('*')
+        .eq('año', año)
+        .eq('mes', mes)
+        .order('nombre_apellido');
+
+      if (supervisorasError) throw supervisorasError;
+
+      console.log('📊 Datos desde view supervisoras:', resumenSupervisoras);
+
+      // 3. Procesar datos de supervisoras
+      const supervisionesPorSupervisora = (resumenSupervisoras || []).map(resumen => {
+        // Encontrar datos de la supervisora
+        const supervisora = supervisoras.find(s => s.id === resumen.supervisora_id);
+        if (!supervisora) {
+          console.warn('Supervisora no encontrada:', resumen.supervisora_id);
+          return null;
+        }
+
+        // Crear estructura detallada
+        return {
+          supervisora,
+
+          // Supervisiones del mes
+          supervisiones: {
+            cantidad: resumen.cantidad_supervisiones,
+            horas: resumen.horas_supervisiones,
+            monto: resumen.monto_supervisiones,
+            futuras_incluidas: resumen.supervisiones_futuras_incluidas
+          },
+
+          // Acompañamientos del mes por tipo
+          acompanamientos: {
+            evaluaciones: {
+              cantidad: resumen.cantidad_acomp_evaluaciones,
+              horas: resumen.horas_acomp_evaluaciones,
+              monto: resumen.monto_acomp_evaluaciones
+            },
+            reevaluaciones: {
+              cantidad: resumen.cantidad_acomp_reevaluaciones,
+              horas: resumen.horas_acomp_reevaluaciones,
+              monto: resumen.monto_acomp_reevaluaciones
+            },
+            devoluciones: {
+              cantidad: resumen.cantidad_acomp_devoluciones,
+              horas: resumen.horas_acomp_devoluciones,
+              monto: resumen.monto_acomp_devoluciones
+            },
+            reuniones: {
+              cantidad: resumen.cantidad_acomp_reuniones,
+              horas: resumen.horas_acomp_reuniones,
+              monto: resumen.monto_acomp_reuniones
+            },
+            sesiones: {
+              cantidad: resumen.cantidad_acomp_sesiones,
+              horas: resumen.horas_acomp_sesiones,
+              monto: resumen.monto_acomp_sesiones
+            },
+            total_monto: resumen.monto_total_acompanamientos,
+            futuras_incluidas: resumen.acompanamientos_futuros_incluidos
+          },
+
+          // Totales
+          totalMes: resumen.total_mes_actual,
+          saldoAnterior: resumen.saldo_anterior,
+          totalFinal: resumen.total_final,
+
+          // Debug info
+          debug: {
+            supervisiones_anteriores: resumen.debug_supervisiones_anteriores,
+            acompanamientos_anteriores: resumen.debug_acompanamientos_anteriores,
+            pagos_realizados: resumen.debug_pagos_realizados
+          }
+        };
+      }).filter(Boolean); // Remover nulls
+
+      return {
+        alquiler: Math.max(0, alquilerPendiente),
+        supervisiones: supervisionesPorSupervisora
+      };
+
+    } catch (error) {
+      console.error('Error procesando gastos con view:', error);
+      return {
+        alquiler: 0,
+        supervisiones: []
+      };
+    }
+  };
+
   // Función para detectar si hay una factura por el monto correspondiente
   const detectarFacturacion = async (pacienteId, monto, año, mes) => {
     try {
-      // Buscar facturas del paciente en el rango de fechas del mes
       const inicioMesBusqueda = new Date(año, mes - 1, 1).toISOString().split('T')[0];
       const finMesBusqueda = new Date(año, mes, 0).toISOString().split('T')[0];
 
@@ -215,11 +380,10 @@ const FacturarView = ({
 
       if (error) throw error;
 
-      // Verificar si hay una factura por el monto exacto o similar (±5%)
       const facturaEncontrada = (facturas || []).find(f => {
         const diferencia = Math.abs(f.monto_ars - monto);
         const porcentajeDiferencia = (diferencia / monto) * 100;
-        return porcentajeDiferencia <= 5; // Tolerancia del 5%
+        return porcentajeDiferencia <= 5;
       });
 
       return !!facturaEncontrada;
@@ -229,29 +393,10 @@ const FacturarView = ({
     }
   };
 
-  // Función para detectar si está completamente pagado
-  const detectarPagoCompleto = async (pacienteId, monto, año, mes) => {
+  // Detectar pago completo usando saldo de la view
+  const detectarPagoCompleto = async (pacienteId, totalFinal) => {
     try {
-      // Buscar pagos del paciente hasta la fecha
-      const { data: pagos, error } = await supabase
-        .from('pagos_recibidos')
-        .select('monto_ars')
-        .eq('paciente_id', pacienteId)
-        .eq('eliminado', false);
-
-      if (error) throw error;
-
-      const totalPagado = (pagos || []).reduce((sum, p) => sum + p.monto_ars, 0);
-
-      // Calcular saldo actual
-      const { data: saldoActual } = await supabase
-        .rpc('calcular_saldo_total_hasta_mes', {
-          p_paciente_id: pacienteId,
-          p_año: año,
-          p_mes: mes
-        });
-
-      return (saldoActual || 0) <= 0; // Está pagado si el saldo es 0 o negativo
+      return totalFinal <= 0;
     } catch (error) {
       console.error('Error detectando pago completo:', error);
       return false;
@@ -261,7 +406,6 @@ const FacturarView = ({
   // Función para obtener/crear seguimiento de facturación
   const obtenerSeguimiento = async (pacienteId, año, mes, montoTotal) => {
     try {
-      // Buscar registro existente
       let { data: seguimiento, error } = await supabase
         .from('seguimiento_facturacion')
         .select('*')
@@ -274,19 +418,17 @@ const FacturarView = ({
         throw error;
       }
 
-      // Detectar estados automáticamente
-      const facturadoAutomatico = await detectarFacturacion(pacienteId, montoTotal, año, mes);
-      const pagadoAutomatico = await detectarPagoCompleto(pacienteId, montoTotal, año, mes);
+      const facturadoAutomatico = await detectarFacturacion(pacienteId, Math.abs(montoTotal), año, mes);
+      const pagadoAutomatico = await detectarPagoCompleto(pacienteId, montoTotal);
 
       if (!seguimiento) {
-        // Crear nuevo registro
         const { data: nuevoSeguimiento, error: createError } = await supabase
           .from('seguimiento_facturacion')
           .insert([{
             paciente_id: pacienteId,
             año: año,
             mes: mes,
-            monto_total_facturado: montoTotal,
+            monto_total_facturado: Math.abs(montoTotal),
             enviado_tutor: false,
             facturado: facturadoAutomatico,
             completamente_pagado: pagadoAutomatico,
@@ -299,7 +441,6 @@ const FacturarView = ({
         if (createError) throw createError;
         seguimiento = nuevoSeguimiento;
       } else {
-        // Actualizar detección automática si cambió
         const needsUpdate = seguimiento.facturado !== facturadoAutomatico ||
           seguimiento.completamente_pagado !== pagadoAutomatico;
 
@@ -336,7 +477,7 @@ const FacturarView = ({
     }
   };
 
-  // Función para actualizar estado de seguimiento (solo para "enviado_tutor")
+  // Función para actualizar estado de seguimiento
   const actualizarSeguimiento = async (seguimientoId, campo, valor) => {
     try {
       const updateData = { [campo]: valor };
@@ -352,7 +493,6 @@ const FacturarView = ({
 
       if (error) throw error;
 
-      // Recargar datos
       cargarDatosFacturacion();
 
       if (window.showToast) {
@@ -366,69 +506,6 @@ const FacturarView = ({
     }
   };
 
-  const procesarSalidas = async (sesiones, inicioMes, finMes) => {
-    // Calcular alquiler pendiente
-    const fechaInicioAlquiler = new Date('2025-05-01');
-    const mesActual = new Date(mesSeleccionado.getFullYear(), mesSeleccionado.getMonth(), 1);
-
-    let mesesAlquiler = 0;
-    if (mesActual >= fechaInicioAlquiler) {
-      const diffTime = mesActual.getTime() - fechaInicioAlquiler.getTime();
-      mesesAlquiler = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44)) + 1;
-    }
-
-    const totalAlquilerAdeudado = mesesAlquiler * (alquilerConfig?.precio_mensual || 0);
-
-    const { data: pagosAlquiler } = await supabase
-      .from('pagos_hechos')
-      .select('monto_ars')
-      .eq('concepto', 'Alquiler')
-      .eq('eliminado', false);
-
-    const totalAlquilerPagado = (pagosAlquiler || []).reduce((sum, p) => sum + p.monto_ars, 0);
-    const alquilerPendiente = totalAlquilerAdeudado - totalAlquilerPagado;
-
-    // Calcular supervisiones pendientes
-    const supervisionesPorSupervisora = [];
-
-    for (const supervisora of supervisoras.filter(s => !s.eliminado)) {
-      const { data: sesionesSupervision } = await supabase
-        .from('sesiones')
-        .select('precio_por_hora, duracion_horas, fecha_hora')
-        .eq('supervisora_id', supervisora.id)
-        .eq('tipo_sesion', 'Supervisión')
-        .eq('estado', 'Realizada')
-        .eq('eliminado', false);
-
-      const totalAdeudado = (sesionesSupervision || []).reduce((sum, s) =>
-        sum + (s.precio_por_hora * s.duracion_horas), 0);
-
-      const { data: pagosSupervision } = await supabase
-        .from('pagos_hechos')
-        .select('monto_ars')
-        .eq('supervisora_id', supervisora.id)
-        .eq('eliminado', false);
-
-      const totalPagado = (pagosSupervision || []).reduce((sum, p) => sum + p.monto_ars, 0);
-      const saldoPendiente = totalAdeudado - totalPagado;
-
-      if (saldoPendiente > 0) {
-        supervisionesPorSupervisora.push({
-          supervisora,
-          totalAdeudado,
-          totalPagado,
-          saldoPendiente,
-          sesionesCount: (sesionesSupervision || []).length
-        });
-      }
-    }
-
-    return {
-      alquiler: Math.max(0, alquilerPendiente),
-      supervisiones: supervisionesPorSupervisora
-    };
-  };
-
   const formatCurrency = (amount, currency = currencyMode) => {
     if (currency === 'USD') {
       return `$${(amount / tipoCambio).toFixed(0)} USD`;
@@ -437,9 +514,9 @@ const FacturarView = ({
   };
 
   const calcularNetoTotal = () => {
-    const totalIngresos = (datosFacturacion.entradas.pendientes || []).reduce((sum, e) => sum + e.saldoTotalHastaMes, 0);
+    const totalIngresos = (datosFacturacion.entradas.pendientes || []).reduce((sum, e) => sum + e.totalFinal, 0);
     const totalGastos = datosFacturacion.salidas.alquiler +
-      datosFacturacion.salidas.supervisiones.reduce((sum, s) => sum + s.saldoPendiente, 0);
+      datosFacturacion.salidas.supervisiones.reduce((sum, s) => sum + s.totalFinal, 0);
     return totalIngresos - totalGastos;
   };
 
@@ -565,20 +642,21 @@ const FacturarView = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ENTRADAS - Ingresos a cobrar */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ENTRADAS - Todos los ingresos (pendientes + pagados) */}
         <div className="card p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
               <DollarSign className="text-green-600" size={20} />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-gray-800">Ingresos a Cobrar</h3>
-              <p className="text-sm text-gray-600">Pendientes de pago</p>
+              <h3 className="text-xl font-bold text-gray-800">Ingresos del Mes</h3>
+              <p className="text-sm text-gray-600">Resúmenes para tutores</p>
             </div>
           </div>
 
           <div className="space-y-6">
+            {/* Primero los pendientes */}
             {(datosFacturacion.entradas.pendientes || []).map(entrada => (
               <div key={entrada.paciente.id} className="border border-gray-200 rounded-lg p-4">
                 {/* Header del paciente */}
@@ -591,8 +669,10 @@ const FacturarView = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-bold text-green-600">
-                      {formatCurrency(entrada.saldoTotalHastaMes)}
+                    <div className="text-xl font-bold text-green-600 flex items-center gap-2">
+                      {formatCurrency(entrada.totalFinal)}
+                      {entrada.seguimiento?.completamente_pagado && <CheckCircle size={16} className="text-green-500" />}
+                      {!entrada.seguimiento?.enviado_tutor && <AlertTriangle size={16} className="text-yellow-500" />}
                     </div>
                     <div className="text-xs text-gray-500">A cobrar</div>
                   </div>
@@ -602,20 +682,32 @@ const FacturarView = ({
                 <div className="space-y-2 text-sm">
                   {entrada.sesiones.regulares.cantidad > 0 && (
                     <div className="flex justify-between py-1">
-                      <span>🧠 Sesiones ({entrada.sesiones.regulares.cantidad})</span>
+                      <span>🧠 Sesiones ({entrada.sesiones.regulares.cantidad}) - {entrada.sesiones.regulares.horas}h</span>
                       <span className="font-medium">{formatCurrency(entrada.sesiones.regulares.total)}</span>
                     </div>
                   )}
                   {entrada.sesiones.evaluaciones.cantidad > 0 && (
                     <div className="flex justify-between py-1">
-                      <span>📋 Evaluaciones ({entrada.sesiones.evaluaciones.cantidad})</span>
+                      <span>📋 Evaluaciones ({entrada.sesiones.evaluaciones.cantidad}) - {entrada.sesiones.evaluaciones.horas}h</span>
                       <span className="font-medium">{formatCurrency(entrada.sesiones.evaluaciones.total)}</span>
                     </div>
                   )}
                   {entrada.sesiones.reevaluaciones.cantidad > 0 && (
                     <div className="flex justify-between py-1">
-                      <span>📝 Re-evaluaciones ({entrada.sesiones.reevaluaciones.cantidad})</span>
+                      <span>📝 Re-evaluaciones ({entrada.sesiones.reevaluaciones.cantidad}) - {entrada.sesiones.reevaluaciones.horas}h</span>
                       <span className="font-medium">{formatCurrency(entrada.sesiones.reevaluaciones.total)}</span>
+                    </div>
+                  )}
+                  {entrada.sesiones.devoluciones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>🔄 Devoluciones ({entrada.sesiones.devoluciones.cantidad}) - {entrada.sesiones.devoluciones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(entrada.sesiones.devoluciones.total)}</span>
+                    </div>
+                  )}
+                  {entrada.sesiones.reuniones_colegio.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>🏫 Reuniones colegio ({entrada.sesiones.reuniones_colegio.cantidad}) - {entrada.sesiones.reuniones_colegio.horas}h</span>
+                      <span className="font-medium">{formatCurrency(entrada.sesiones.reuniones_colegio.total)}</span>
                     </div>
                   )}
 
@@ -624,13 +716,22 @@ const FacturarView = ({
                     <span>{formatCurrency(entrada.totalMes)}</span>
                   </div>
 
-                  {/* Mostrar si hay saldo anterior incluido */}
-                  {entrada.saldoTotalHastaMes > entrada.totalMes && (
+                  {/* Mostrar saldo anterior si existe */}
+                  {entrada.saldoAnterior !== 0 && (
                     <div className="flex justify-between py-1">
-                      <span className="text-orange-600">+ Saldo pendiente anterior</span>
-                      <span className="text-orange-600 font-medium">
-                        +{formatCurrency(entrada.saldoTotalHastaMes - entrada.totalMes)}
+                      <span className={entrada.saldoAnterior > 0 ? "text-orange-600" : "text-green-600"}>
+                        {entrada.saldoAnterior > 0 ? '+ Saldo pendiente anterior' : '- Saldo a favor anterior'}
                       </span>
+                      <span className={`font-medium ${entrada.saldoAnterior > 0 ? "text-orange-600" : "text-green-600"}`}>
+                        {entrada.saldoAnterior > 0 ? '+' : ''}{formatCurrency(entrada.saldoAnterior)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Mostrar si hay sesiones futuras incluidas */}
+                  {entrada.sesiones_futuras_incluidas > 0 && (
+                    <div className="text-xs text-blue-600 mt-2 p-2 bg-blue-50 rounded">
+                      ℹ️ Incluye {entrada.sesiones_futuras_incluidas} sesión(es) futura(s) del mes
                     </div>
                   )}
                 </div>
@@ -715,47 +816,35 @@ const FacturarView = ({
               </div>
             ))}
 
-            {(datosFacturacion.entradas.pendientes || []).length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="mx-auto mb-3" size={48} />
-                <p>No hay ingresos pendientes de cobro</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* NUEVA SECCIÓN - Facturados/Pagados */}
-        <div className="card p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="text-blue-600" size={20} />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-gray-800">Facturados/Pagados</h3>
-              <p className="text-sm text-gray-600">Ya completados del mes</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
+            {/* Después los pagados */}
             {(datosFacturacion.entradas.pagados || []).map(entrada => (
               <div key={entrada.paciente.id} className="border border-green-200 bg-green-50 rounded-lg p-4">
                 {/* Header del paciente */}
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h4 className="font-bold text-gray-800">{entrada.paciente.nombre_apellido}</h4>
+                    <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                      {entrada.paciente.nombre_apellido}
+                      <CheckCircle size={16} className="text-green-600" />
+                    </h4>
                     <div className="text-sm text-gray-600">
-                      <span className="font-medium">Tutor:</span> {entrada.paciente.nombre_apellido_tutor}
+                      <div><span className="font-medium">Tutor:</span> {entrada.paciente.nombre_apellido_tutor}</div>
+                      <div><span className="font-medium">CUIL:</span> {entrada.paciente.cuil}</div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-bold text-green-600">
-                      ✓ {formatCurrency(entrada.totalMes)}
+                    <div className="text-xl font-bold text-green-600 flex items-center gap-2">
+                      {formatCurrency(entrada.totalMes)}
+                      <div className="flex gap-1">
+                        {!entrada.seguimiento?.enviado_tutor && <AlertTriangle size={14} className="text-yellow-500" />}
+                        {entrada.seguimiento?.facturado && <FileCheck size={14} className="text-purple-500" />}
+                        <CreditCard size={14} className="text-green-500" />
+                      </div>
                     </div>
                     <div className="text-xs text-green-600">Completado</div>
                   </div>
                 </div>
 
-                {/* Advertencia si no se envió al tutor */}
+                {/* Mostrar alerta si no se envió al tutor */}
                 {entrada.seguimiento && !entrada.seguimiento.enviado_tutor && (
                   <div className="mb-3 p-2 bg-yellow-100 border border-yellow-300 rounded-lg">
                     <div className="flex items-center justify-between">
@@ -777,25 +866,52 @@ const FacturarView = ({
                   </div>
                 )}
 
-                {/* Estado resumido */}
+                {/* Sistema de seguimiento simplificado */}
                 {entrada.seguimiento && (
-                  <div className="flex justify-between text-xs text-gray-600">
-                    <span className={entrada.seguimiento.enviado_tutor ? 'text-blue-600' : 'text-gray-400'}>
-                      📧 {entrada.seguimiento.enviado_tutor ? 'Enviado' : 'No enviado'}
-                    </span>
-                    <span className={entrada.seguimiento.facturado ? 'text-purple-600' : 'text-gray-400'}>
-                      📄 {entrada.seguimiento.facturado ? 'Facturado' : 'No facturado'}
-                    </span>
-                    <span className="text-green-600">💳 Pagado</span>
+                  <div className="mt-3 pt-3 border-t border-green-200">
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* Enviado al tutor - MANUAL */}
+                      <button
+                        onClick={() => actualizarSeguimiento(
+                          entrada.seguimiento.id,
+                          'enviado_tutor',
+                          !entrada.seguimiento.enviado_tutor
+                        )}
+                        className={`p-2 rounded-lg border-2 transition-all text-xs ${entrada.seguimiento.enviado_tutor
+                          ? 'bg-blue-100 border-blue-500 text-blue-700'
+                          : 'bg-gray-50 border-gray-300 text-gray-600 hover:border-blue-300'
+                          }`}
+                      >
+                        <Mail size={14} className="mx-auto mb-1" />
+                        <div className="font-medium">Enviado</div>
+                      </button>
+
+                      {/* Facturado - AUTOMÁTICO */}
+                      <div
+                        className={`p-2 rounded-lg border-2 text-xs ${entrada.seguimiento.facturado
+                          ? 'bg-purple-100 border-purple-500 text-purple-700'
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                          }`}
+                      >
+                        <FileCheck size={14} className="mx-auto mb-1" />
+                        <div className="font-medium">Facturado</div>
+                      </div>
+
+                      {/* Pagado - AUTOMÁTICO */}
+                      <div className="p-2 rounded-lg border-2 text-xs bg-green-100 border-green-500 text-green-700">
+                        <CreditCard size={14} className="mx-auto mb-1" />
+                        <div className="font-medium">Pagado</div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             ))}
 
-            {(datosFacturacion.entradas.pagados || []).length === 0 && (
+            {(datosFacturacion.entradas.pendientes || []).length === 0 && (datosFacturacion.entradas.pagados || []).length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                <CheckCircle className="mx-auto mb-3" size={48} />
-                <p>No hay facturas completadas este mes</p>
+                <FileText className="mx-auto mb-3" size={48} />
+                <p>No hay actividad este mes</p>
               </div>
             )}
           </div>
@@ -835,25 +951,99 @@ const FacturarView = ({
               </div>
             )}
 
-            {/* Supervisiones */}
+            {/* 🚀 SUPERVISIONES CON DETALLE COMPLETO */}
             {datosFacturacion.salidas.supervisiones.map(supervision => (
               <div key={supervision.supervisora.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
+                {/* Header de la supervisora */}
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <User className="text-purple-600" size={20} />
                     <div>
                       <h4 className="font-bold text-gray-800">{supervision.supervisora.nombre_apellido}</h4>
                       <p className="text-sm text-gray-600">
-                        {supervision.sesionesCount} sesión(es) de supervisión
+                        {supervision.supervisiones.cantidad > 0 && `${supervision.supervisiones.cantidad} supervisión(es)`}
+                        {supervision.supervisiones.cantidad > 0 && supervision.acompanamientos.total_monto > 0 && ' + '}
+                        {supervision.acompanamientos.total_monto > 0 && 'acompañamientos'}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-xl font-bold text-red-600">
-                      {formatCurrency(supervision.saldoPendiente)}
+                      {formatCurrency(supervision.totalFinal)}
                     </div>
-                    <div className="text-xs text-gray-500">Pendiente</div>
+                    <div className="text-xs text-gray-500">Total a pagar</div>
                   </div>
+                </div>
+
+                {/* Detalle del mes */}
+                <div className="space-y-2 text-sm">
+                  {/* Supervisiones del mes */}
+                  {supervision.supervisiones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>👥 Supervisiones ({supervision.supervisiones.cantidad}) - {supervision.supervisiones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(supervision.supervisiones.monto)}</span>
+                    </div>
+                  )}
+
+                  {/* Acompañamientos por tipo */}
+                  {supervision.acompanamientos.evaluaciones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>📋 Acomp. Evaluaciones ({supervision.acompanamientos.evaluaciones.cantidad}) - {supervision.acompanamientos.evaluaciones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(supervision.acompanamientos.evaluaciones.monto)}</span>
+                    </div>
+                  )}
+
+                  {supervision.acompanamientos.reevaluaciones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>📝 Acomp. Re-evaluaciones ({supervision.acompanamientos.reevaluaciones.cantidad}) - {supervision.acompanamientos.reevaluaciones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(supervision.acompanamientos.reevaluaciones.monto)}</span>
+                    </div>
+                  )}
+
+                  {supervision.acompanamientos.devoluciones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>🔄 Acomp. Devoluciones ({supervision.acompanamientos.devoluciones.cantidad}) - {supervision.acompanamientos.devoluciones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(supervision.acompanamientos.devoluciones.monto)}</span>
+                    </div>
+                  )}
+
+                  {supervision.acompanamientos.reuniones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>🏫 Acomp. Reuniones colegio ({supervision.acompanamientos.reuniones.cantidad}) - {supervision.acompanamientos.reuniones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(supervision.acompanamientos.reuniones.monto)}</span>
+                    </div>
+                  )}
+
+                  {supervision.acompanamientos.sesiones.cantidad > 0 && (
+                    <div className="flex justify-between py-1">
+                      <span>🧠 Acomp. Sesiones ({supervision.acompanamientos.sesiones.cantidad}) - {supervision.acompanamientos.sesiones.horas}h</span>
+                      <span className="font-medium">{formatCurrency(supervision.acompanamientos.sesiones.monto)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between py-1 border-t pt-2 font-medium">
+                    <span>Subtotal del mes</span>
+                    <span>{formatCurrency(supervision.totalMes)}</span>
+                  </div>
+
+                  {/* Mostrar saldo anterior si existe */}
+                  {supervision.saldoAnterior !== 0 && (
+                    <div className="flex justify-between py-1">
+                      <span className={supervision.saldoAnterior > 0 ? "text-orange-600" : "text-green-600"}>
+                        {supervision.saldoAnterior > 0 ? '+ Saldo pendiente anterior' : '- Saldo a favor anterior'}
+                      </span>
+                      <span className={`font-medium ${supervision.saldoAnterior > 0 ? "text-orange-600" : "text-green-600"}`}>
+                        {supervision.saldoAnterior > 0 ? '+' : ''}{formatCurrency(supervision.saldoAnterior)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Mostrar si hay actividades futuras incluidas */}
+                  {(supervision.supervisiones.futuras_incluidas > 0 || supervision.acompanamientos.futuras_incluidas > 0) && (
+                    <div className="text-xs text-blue-600 mt-2 p-2 bg-blue-50 rounded">
+                      ℹ️ Incluye {supervision.supervisiones.futuras_incluidas + supervision.acompanamientos.futuras_incluidas} actividad(es) futura(s) del mes
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

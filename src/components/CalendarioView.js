@@ -94,6 +94,19 @@ const CalendarioView = ({
     }).sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)); // ORDENAR POR HORA
   };
 
+  // 🚀 ÍCONOS CORREGIDOS - Consistentes con FacturarView
+  const getSessionIcon = (sesion) => {
+    switch (sesion.tipo_sesion) {
+      case 'Sesión': return '🧠';
+      case 'Evaluación': return '📋';
+      case 'Re-evaluación': return '📝';
+      case 'Devolución': return '🔄';
+      case 'Reunión con colegio': return '🏫';
+      case 'Supervisión': return '👥';
+      default: return '🧠'; // Fallback para sesiones regulares
+    }
+  };
+
   // Componente del día
   const DayCell = ({ fecha, sesionesDelDia }) => {
     const isToday = fecha.toDateString() === new Date().toDateString();
@@ -108,15 +121,6 @@ const CalendarioView = ({
     const getSessionColor = (sesion) => {
       const paciente = getPacienteById(sesion.paciente_id);
       return paciente?.color || '#6b7280';
-    };
-
-    const getSessionIcon = (sesion) => {
-      switch (sesion.tipo_sesion) {
-        case 'Evaluación': return '📋';
-        case 'Re-evaluación': return '📝';
-        case 'Supervisión': return '👥';
-        default: return '🧠';
-      }
     };
 
     return (
@@ -162,7 +166,6 @@ const CalendarioView = ({
                 <div className="session-content">
                   <span className="session-icon">{getSessionIcon(sesion)}</span>
                   <span className="session-time">{hora}</span>
-                  {/* ✅ CAMBIO: Mostrar nombre completo en lugar de solo el primer nombre */}
                   <span className="session-name">
                     {persona?.nombre_apellido || 'Sin asignar'}
                   </span>
@@ -259,7 +262,7 @@ const CalendarioView = ({
                 className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium shadow-lg hover:from-orange-600 hover:to-yellow-600 transition-all text-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 Categorizar ({sesionsPendientes})
               </button>
@@ -292,7 +295,7 @@ const CalendarioView = ({
         </div>
       </div>
 
-      {/* Leyenda - MÁS COMPACTA */}
+      {/* Leyenda - MÁS COMPACTA con íconos corregidos */}
       <div className="glass-effect p-3 rounded-xl">
         <h4 className="font-semibold text-gray-800 mb-2 text-xs">Leyenda</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -306,14 +309,13 @@ const CalendarioView = ({
                     className="w-3 h-3 rounded"
                     style={{ backgroundColor: paciente.color }}
                   ></div>
-                  {/* ✅ CAMBIO: Mostrar nombre completo también en leyenda */}
                   <span>{paciente.nombre_apellido}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Estados */}
+          {/* Estados e íconos actualizados */}
           <div>
             <h5 className="font-medium text-gray-700 mb-1 text-xs">Estados:</h5>
             <div className="space-y-1 text-xs">
@@ -322,7 +324,7 @@ const CalendarioView = ({
                 <span>Pendiente de categorizar</span>
               </div>
               <div className="text-xs text-gray-600 mt-1">
-                <span className="font-medium">Iconos:</span> 🧠 Sesión • 📋 Evaluación • 📝 Re-evaluación • 👥 Supervisión
+                <span className="font-medium">Íconos:</span> 🧠 Sesión • 📋 Evaluación • 📝 Re-evaluación • 🔄 Devolución • 🏫 Reunión colegio • 👥 Supervisión
               </div>
             </div>
           </div>

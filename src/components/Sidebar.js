@@ -11,7 +11,8 @@ const Sidebar = ({
   sesionsPendientes,
   sesiones = [],
   supervisoras = [],
-  alquilerConfig = { precio_mensual: 50000 }
+  alquilerConfig = { precio_mensual: 50000 },
+  lastUpdateTimestamp // 🚀 NUEVO: Para detectar actualizaciones
 }) => {
   const [perfilConfig, setPerfilConfig] = useState({
     nombre_completo: 'Victoria Güemes',
@@ -20,11 +21,42 @@ const Sidebar = ({
   });
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState('');
+  const [datosProyeccion, setDatosProyeccion] = useState({
+    gananciaNeta: 0,
+    ingresos: 0,
+    gastoSupervision: 0,
+    gastoAlquiler: 0,
+    detalle: {
+      sesiones: 0,
+      evaluaciones: 0,
+      reevaluaciones: 0,
+      devoluciones: 0,
+      reuniones_colegio: 0,
+      ingresosSesiones: 0,
+      ingresosEvaluaciones: 0,
+      ingresosReevaluaciones: 0,
+      ingresosDevoluciones: 0,
+      ingresosReuniones: 0
+    },
+    supervisiones: []
+  });
 
   // Cargar configuración de perfil
   useEffect(() => {
     cargarPerfilConfig();
   }, []);
+
+  // 🚀 NUEVO: Cargar datos de proyección usando las views
+  useEffect(() => {
+    if (sesiones && supervisoras) { // Solo ejecutar si tenemos datos
+      // Agregar un pequeño delay para permitir que la BD se actualice
+      const timer = setTimeout(() => {
+        calcularProyeccionConViews();
+      }, 500); // 500ms delay para asegurar que la BD esté actualizada
+
+      return () => clearTimeout(timer);
+    }
+  }, [sesiones?.length, supervisoras?.length, alquilerConfig?.precio_mensual, lastUpdateTimestamp]); // ✅ DETECTAR CAMBIOS CON TIMESTAMP
 
   const cargarPerfilConfig = async () => {
     try {
@@ -46,6 +78,216 @@ const Sidebar = ({
     }
   };
 
+  // 🚀 NUEVA FUNCIÓN: Calcular proyección usando las views de Supabase
+  const calcularProyeccionConViews = async () => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+
+      console.log('📊 Calculando proyección sidebar para:', { year, month });
+
+      // 1. Obtener ingresos usando la view de pacientes (datos frescos)
+      const { data: ingresosView, error: ingresosError } = await supabase
+        .from('resumen_facturacion_mensual')
+        .select('*')
+        .eq('año', year)
+        .eq('mes', month);
+
+      if (ingresosError) throw ingresosError;
+
+      // 2. Obtener gastos de supervisoras usando la view
+      const { data: gastosView, error: gastosError } = await supabase
+        .from('resumen_gastos_supervisoras_mensual')
+        .select('*')
+        .eq('año', year)
+        .eq('mes', month);
+
+      if (gastosError) throw gastosError;
+
+      // 3. Calcular alquiler (lógica original)
+      const fechaInicioAlquiler = new Date('2025-05-01');
+      const mesActual = new Date(year, month - 1, 1);
+
+      let mesesAlquiler = 0;
+      if (mesActual >= fechaInicioAlquiler) {
+        const diffTime = mesActual.getTime() - fechaInicioAlquiler.getTime();
+        mesesAlquiler = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44)) + 1;
+      }
+
+      const totalAlquilerAdeudado = mesesAlquiler * (alquilerConfig?.precio_mensual || 0);
+
+      const { data: pagosAlquiler } = await supabase
+        .from('pagos_hechos')
+        .select('monto_ars')
+        .eq('concepto', 'Alquiler')
+        .eq('eliminado', false);
+
+      const totalAlquilerPagado = (pagosAlquiler || []).reduce((sum, p) => sum + p.monto_ars, 0);
+      const gastoAlquiler = Math.max(0, totalAlquilerAdeudado - totalAlquilerPagado);
+
+      // 4. Procesar datos de ingresos
+      let totalIngresos = 0;
+      const detalleIngresos = {
+        sesiones: 0,
+        evaluaciones: 0,
+        reevaluaciones: 0,
+        devoluciones: 0,
+        reuniones_colegio: 0,
+        ingresosSesiones: 0,
+        ingresosEvaluaciones: 0,
+        ingresosReevaluaciones: 0,
+        ingresosDevoluciones: 0,
+        ingresosReuniones: 0
+      };
+
+      (ingresosView || []).forEach(resumen => {
+        // Solo contar si el total final es positivo (hay algo que cobrar)
+        if (resumen.total_final > 0) {
+          totalIngresos += resumen.total_final;
+
+          // Sumar cantidades y montos por tipo
+          detalleIngresos.sesiones += resumen.cantidad_sesiones || 0;
+          detalleIngresos.evaluaciones += resumen.cantidad_evaluaciones || 0;
+          detalleIngresos.reevaluaciones += resumen.cantidad_reevaluaciones || 0;
+          detalleIngresos.devoluciones += resumen.cantidad_devoluciones || 0;
+          detalleIngresos.reuniones_colegio += resumen.cantidad_reuniones_colegio || 0;
+
+          detalleIngresos.ingresosSesiones += resumen.monto_sesiones || 0;
+          detalleIngresos.ingresosEvaluaciones += resumen.monto_evaluaciones || 0;
+          detalleIngresos.ingresosReevaluaciones += resumen.monto_reevaluaciones || 0;
+          detalleIngresos.ingresosDevoluciones += resumen.monto_devoluciones || 0;
+          detalleIngresos.ingresosReuniones += resumen.monto_reuniones_colegio || 0;
+        }
+      });
+
+      // 5. Procesar datos de gastos de supervisoras (discriminado por tipo)
+      let totalGastoSupervision = 0;
+      const supervisionesDetalle = {
+        supervisiones: { cantidad: 0, monto: 0 },
+        acomp_evaluaciones: { cantidad: 0, monto: 0 },
+        acomp_reevaluaciones: { cantidad: 0, monto: 0 },
+        acomp_devoluciones: { cantidad: 0, monto: 0 },
+        acomp_reuniones: { cantidad: 0, monto: 0 },
+        acomp_sesiones: { cantidad: 0, monto: 0 }
+      };
+
+      (gastosView || []).forEach(gasto => {
+        if (gasto.total_final > 0) {
+          totalGastoSupervision += gasto.total_final;
+
+          // Acumular por tipo (sumando todas las supervisoras)
+          supervisionesDetalle.supervisiones.cantidad += gasto.cantidad_supervisiones || 0;
+          supervisionesDetalle.supervisiones.monto += gasto.monto_supervisiones || 0;
+
+          supervisionesDetalle.acomp_evaluaciones.cantidad += gasto.cantidad_acomp_evaluaciones || 0;
+          supervisionesDetalle.acomp_evaluaciones.monto += gasto.monto_acomp_evaluaciones || 0;
+
+          supervisionesDetalle.acomp_reevaluaciones.cantidad += gasto.cantidad_acomp_reevaluaciones || 0;
+          supervisionesDetalle.acomp_reevaluaciones.monto += gasto.monto_acomp_reevaluaciones || 0;
+
+          supervisionesDetalle.acomp_devoluciones.cantidad += gasto.cantidad_acomp_devoluciones || 0;
+          supervisionesDetalle.acomp_devoluciones.monto += gasto.monto_acomp_devoluciones || 0;
+
+          supervisionesDetalle.acomp_reuniones.cantidad += gasto.cantidad_acomp_reuniones || 0;
+          supervisionesDetalle.acomp_reuniones.monto += gasto.monto_acomp_reuniones || 0;
+
+          supervisionesDetalle.acomp_sesiones.cantidad += gasto.cantidad_acomp_sesiones || 0;
+          supervisionesDetalle.acomp_sesiones.monto += gasto.monto_acomp_sesiones || 0;
+        }
+      });
+
+      // 6. Calcular ganancia neta
+      const gananciaNeta = totalIngresos - totalGastoSupervision - gastoAlquiler;
+
+      // 7. Actualizar estado
+      setDatosProyeccion({
+        gananciaNeta,
+        ingresos: totalIngresos,
+        gastoSupervision: totalGastoSupervision,
+        gastoAlquiler,
+        detalle: detalleIngresos,
+        supervisionesDetalle
+      });
+
+      console.log('📊 Proyección calculada:', {
+        ingresos: totalIngresos,
+        gastoSupervision: totalGastoSupervision,
+        gastoAlquiler,
+        gananciaNeta
+      });
+
+    } catch (error) {
+      console.error('Error calculando proyección:', error);
+      // En caso de error, usar cálculo fallback (lógica original)
+      const fallback = calculateCurrentMonthProfitFallback();
+      setDatosProyeccion(fallback);
+    }
+  };
+
+  // 🔄 Función fallback (lógica original) en caso de que las views fallen
+  const calculateCurrentMonthProfitFallback = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const sesionesDelMes = sesiones.filter(sesion => {
+      const fechaSesion = new Date(sesion.fecha_hora);
+      return fechaSesion.getMonth() === currentMonth &&
+        fechaSesion.getFullYear() === currentYear &&
+        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado);
+    });
+
+    const sesionesIngresos = sesionesDelMes.filter(sesion => sesion.paciente_id);
+    const sesionesSupervisiones = sesionesDelMes.filter(sesion => sesion.supervisora_id);
+
+    const sesionesNormales = sesionesIngresos.filter(s => s.tipo_sesion === 'Sesión');
+    const evaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Evaluación');
+    const reevaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Re-evaluación');
+
+    const ingresosSesiones = sesionesNormales.reduce((total, sesion) =>
+      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+    const ingresosEvaluaciones = evaluaciones.reduce((total, sesion) =>
+      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+    const ingresosReevaluaciones = reevaluaciones.reduce((total, sesion) =>
+      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+
+    const ingresos = ingresosSesiones + ingresosEvaluaciones + ingresosReevaluaciones;
+    const gastoSupervision = sesionesSupervisiones.reduce((total, sesion) => {
+      return total + (sesion.precio_por_hora * sesion.duracion_horas);
+    }, 0);
+
+    const gastoAlquiler = alquilerConfig.precio_mensual || 0;
+    const gananciaNeta = ingresos - gastoSupervision - gastoAlquiler;
+
+    return {
+      gananciaNeta,
+      ingresos,
+      gastoSupervision,
+      gastoAlquiler,
+      detalle: {
+        sesiones: sesionesNormales.length,
+        evaluaciones: evaluaciones.length,
+        reevaluaciones: reevaluaciones.length,
+        devoluciones: 0,
+        reuniones_colegio: 0,
+        ingresosSesiones,
+        ingresosEvaluaciones,
+        ingresosReevaluaciones,
+        ingresosDevoluciones: 0,
+        ingresosReuniones: 0
+      },
+      supervisionesDetalle: {
+        supervisiones: { cantidad: sesionesSupervisiones.length, monto: gastoSupervision },
+        acomp_evaluaciones: { cantidad: 0, monto: 0 },
+        acomp_reevaluaciones: { cantidad: 0, monto: 0 },
+        acomp_devoluciones: { cantidad: 0, monto: 0 },
+        acomp_reuniones: { cantidad: 0, monto: 0 },
+        acomp_sesiones: { cantidad: 0, monto: 0 }
+      }
+    };
+  };
+
   const subirFotoPerfil = async (file) => {
     try {
       const fileExt = file.name.split('.').pop();
@@ -62,7 +304,6 @@ const Sidebar = ({
         .from('profile-photos')
         .getPublicUrl(filePath);
 
-      // Actualizar en la base de datos
       const { error: updateError } = await supabase
         .from('configuracion_perfil')
         .update({ foto_url: urlData.publicUrl })
@@ -111,69 +352,6 @@ const Sidebar = ({
     }
   };
 
-  // Calcular ganancia neta del mes actual con detalles por tipo
-  const calculateCurrentMonthProfit = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // Filtrar sesiones del mes actual
-    const sesionesDelMes = sesiones.filter(sesion => {
-      const fechaSesion = new Date(sesion.fecha_hora);
-      return fechaSesion.getMonth() === currentMonth &&
-        fechaSesion.getFullYear() === currentYear &&
-        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado);
-    });
-
-    // Separar por tipo de sesión
-    const sesionesIngresos = sesionesDelMes.filter(sesion => sesion.paciente_id);
-    const sesionesSupervisiones = sesionesDelMes.filter(sesion => sesion.supervisora_id);
-
-    // Calcular ingresos por tipo
-    const sesionesNormales = sesionesIngresos.filter(s => s.tipo_sesion === 'Sesión');
-    const evaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Evaluación');
-    const reevaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Re-evaluación');
-
-    const ingresosSesiones = sesionesNormales.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
-
-    const ingresosEvaluaciones = evaluaciones.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
-
-    const ingresosReevaluaciones = reevaluaciones.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
-
-    const ingresos = ingresosSesiones + ingresosEvaluaciones + ingresosReevaluaciones;
-
-    // Calcular gastos de supervisión
-    const gastoSupervision = sesionesSupervisiones.reduce((total, sesion) => {
-      return total + (sesion.precio_por_hora * sesion.duracion_horas);
-    }, 0);
-
-    // Gasto de alquiler
-    const gastoAlquiler = alquilerConfig.precio_mensual || 0;
-
-    // Ganancia neta
-    const gananciaNeta = ingresos - gastoSupervision - gastoAlquiler;
-
-    return {
-      ingresos,
-      gastoSupervision,
-      gastoAlquiler,
-      gananciaNeta,
-      cantidadSesionesIngresos: sesionesIngresos.length,
-      cantidadSesionesSupervision: sesionesSupervisiones.length,
-      detalle: {
-        sesiones: sesionesNormales.length,
-        evaluaciones: evaluaciones.length,
-        reevaluaciones: reevaluaciones.length,
-        ingresosSesiones,
-        ingresosEvaluaciones,
-        ingresosReevaluaciones
-      }
-    };
-  };
-
   const formatCurrency = (amount, currency = currencyMode) => {
     if (currency === 'USD') {
       return `${(amount / tipoCambio).toFixed(0)} USD`;
@@ -181,7 +359,8 @@ const Sidebar = ({
     return `${amount.toLocaleString()} ARS`;
   };
 
-  const { gananciaNeta, gastoSupervision, gastoAlquiler, cantidadSesionesSupervision, detalle } = calculateCurrentMonthProfit();
+  // 🚀 USAR LOS NUEVOS DATOS CALCULADOS
+  const { gananciaNeta, gastoAlquiler, detalle, supervisionesDetalle } = datosProyeccion;
   const nombreMes = new Date().toLocaleDateString('es-AR', { month: 'long' });
 
   const menuItems = [
@@ -294,7 +473,7 @@ const Sidebar = ({
         </nav>
       </div>
 
-      {/* Ganancia neta del mes - FLEXIBLE CON MÁRGENES CONSISTENTES */}
+      {/* 🚀 Ganancia neta del mes - ACTUALIZADA CON VIEWS */}
       <div className="px-4 mb-6">
         <div className="p-3 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 flex-1 flex flex-col">
           <h4 className="text-xs text-purple-100 font-medium mb-2">
@@ -305,9 +484,9 @@ const Sidebar = ({
             {formatCurrency(gananciaNeta)}
           </div>
 
-          {/* Detalles SUPER COMPACTOS */}
+          {/* Detalles SUPER COMPACTOS - ACTUALIZADOS */}
           <div className="text-xs text-purple-200 space-y-1 flex-1">
-            {/* Ingresos */}
+            {/* 📈 INGRESOS */}
             {detalle.sesiones > 0 && (
               <div className="flex justify-between">
                 <span>🧠 Sesiones ({detalle.sesiones})</span>
@@ -326,21 +505,75 @@ const Sidebar = ({
                 <span className="text-green-300">{formatCurrency(detalle.ingresosReevaluaciones)}</span>
               </div>
             )}
+            {detalle.devoluciones > 0 && (
+              <div className="flex justify-between">
+                <span>🔄 Devoluciones ({detalle.devoluciones})</span>
+                <span className="text-green-300">{formatCurrency(detalle.ingresosDevoluciones)}</span>
+              </div>
+            )}
+            {detalle.reuniones_colegio > 0 && (
+              <div className="flex justify-between">
+                <span>🏫 Reuniones ({detalle.reuniones_colegio})</span>
+                <span className="text-green-300">{formatCurrency(detalle.ingresosReuniones)}</span>
+              </div>
+            )}
 
             {/* Separador si hay ingresos */}
-            {(detalle.sesiones > 0 || detalle.evaluaciones > 0 || detalle.reevaluaciones > 0) && (
+            {(detalle.sesiones > 0 || detalle.evaluaciones > 0 || detalle.reevaluaciones > 0 || detalle.devoluciones > 0 || detalle.reuniones_colegio > 0) && (
               <div className="border-t border-purple-300/30 my-1"></div>
             )}
 
-            {/* Gastos */}
-            <div className="flex justify-between">
-              <span>👥 Supervisión ({cantidadSesionesSupervision})</span>
-              <span className="text-red-300">-{formatCurrency(gastoSupervision)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🏠 Alquiler</span>
-              <span className="text-red-300">-{formatCurrency(gastoAlquiler)}</span>
-            </div>
+            {/* 📉 GASTOS - Discriminado por tipo */}
+            {/* Supervisiones */}
+            {supervisionesDetalle?.supervisiones?.cantidad > 0 && (
+              <div className="flex justify-between">
+                <span>👥 Supervisiones ({supervisionesDetalle.supervisiones.cantidad})</span>
+                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.supervisiones.monto)}</span>
+              </div>
+            )}
+
+            {/* Acompañamientos por tipo */}
+            {supervisionesDetalle?.acomp_evaluaciones?.cantidad > 0 && (
+              <div className="flex justify-between">
+                <span>📋 Acomp. Evaluaciones ({supervisionesDetalle.acomp_evaluaciones.cantidad})</span>
+                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_evaluaciones.monto)}</span>
+              </div>
+            )}
+
+            {supervisionesDetalle?.acomp_reevaluaciones?.cantidad > 0 && (
+              <div className="flex justify-between">
+                <span>📝 Acomp. Re-evaluaciones ({supervisionesDetalle.acomp_reevaluaciones.cantidad})</span>
+                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_reevaluaciones.monto)}</span>
+              </div>
+            )}
+
+            {supervisionesDetalle?.acomp_devoluciones?.cantidad > 0 && (
+              <div className="flex justify-between">
+                <span>🔄 Acomp. Devoluciones ({supervisionesDetalle.acomp_devoluciones.cantidad})</span>
+                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_devoluciones.monto)}</span>
+              </div>
+            )}
+
+            {supervisionesDetalle?.acomp_reuniones?.cantidad > 0 && (
+              <div className="flex justify-between">
+                <span>🏫 Acomp. Reuniones ({supervisionesDetalle.acomp_reuniones.cantidad})</span>
+                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_reuniones.monto)}</span>
+              </div>
+            )}
+
+            {supervisionesDetalle?.acomp_sesiones?.cantidad > 0 && (
+              <div className="flex justify-between">
+                <span>🧠 Acomp. Sesiones ({supervisionesDetalle.acomp_sesiones.cantidad})</span>
+                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_sesiones.monto)}</span>
+              </div>
+            )}
+
+            {gastoAlquiler > 0 && (
+              <div className="flex justify-between">
+                <span>🏠 Alquiler</span>
+                <span className="text-red-300">-{formatCurrency(gastoAlquiler)}</span>
+              </div>
+            )}
 
             {/* Resultado final */}
             <div className="border-t border-purple-300/30 pt-1 mt-2">

@@ -41,10 +41,14 @@ const CategorizarModal = ({
   const getPacienteById = (id) => pacientes.find(p => p.id === id);
   const getSupervisoraById = (id) => supervisoras.find(s => s.id === id);
 
+  // 🚀 ÍCONOS CORREGIDOS - Consistentes con CalendarioView y FacturarView
   const getSessionIcon = (tipo) => {
     switch (tipo) {
+      case 'Sesión': return '🧠';
       case 'Evaluación': return '📋';
       case 'Re-evaluación': return '📝';
+      case 'Devolución': return '🔄';
+      case 'Reunión con colegio': return '🏫';
       case 'Supervisión': return '👥';
       default: return '🧠';
     }

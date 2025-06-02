@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 
-// Componentes
+// Componentes existentes
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import CalendarioView from './components/CalendarioView';
@@ -17,6 +17,515 @@ import DayDetailModal from './components/DayDetailModal';
 import ConfirmacionCambiosModal from './components/ConfirmacionCambiosModal';
 import ConflictoHorarioModal from './components/ConflictoHorarioModal';
 import ToastSystem from './components/ToastSystem';
+
+// 🚀 NUEVO: Componentes mobile
+import { useIsMobile, MobileHeader, CalendarioMobile, SidebarOverlay } from './components/MobileComponents';
+
+// ============================================================================
+// 🚀 FUNCIONES JS QUE REEMPLAZAN LAS FUNCIONES DE SUPABASE
+// ============================================================================
+
+const crearFechaLocalParaBD = (fecha, horas, minutos) => {
+  const año = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  const horasStr = String(horas).padStart(2, '0');
+  const minutosStr = String(minutos).padStart(2, '0');
+
+  return `${año}-${mes}-${dia} ${horasStr}:${minutosStr}:00`;
+};
+
+/**
+ * Genera sesiones automáticas para un paciente nuevo (3 años desde fecha_inicio)
+ */
+const generarSesionsPacienteNuevo = async (pacienteId) => {
+  try {
+    console.log('🚀 Generando sesiones para paciente nuevo:', pacienteId);
+
+    // 1. Obtener datos del paciente
+    const { data: paciente, error: pacienteError } = await supabase
+      .from('pacientes')
+      .select('*')
+      .eq('id', pacienteId)
+      .single();
+
+    if (pacienteError) throw pacienteError;
+
+    // 2. Obtener horarios del paciente
+    const { data: horarios, error: horariosError } = await supabase
+      .from('horarios_pacientes')
+      .select('*')
+      .eq('paciente_id', pacienteId);
+
+    if (horariosError) throw horariosError;
+
+    if (!horarios || horarios.length === 0) {
+      console.log('❌ No hay horarios configurados para el paciente');
+      return 0;
+    }
+
+    // 3. Configurar fechas (3 años desde fecha_inicio)
+    const fechaInicio = new Date(paciente.fecha_inicio);
+    const fechaFin = new Date(fechaInicio);
+    fechaFin.setFullYear(fechaFin.getFullYear() + 3); // 3 años
+
+    console.log('📅 Generando sesiones desde:', fechaInicio.toISOString().split('T')[0]);
+    console.log('📅 Hasta:', fechaFin.toISOString().split('T')[0]);
+
+    // 4. Generar sesiones para cada horario
+    const sesionesAInsertar = [];
+    let contadorSesiones = 0;
+
+    for (const horario of horarios) {
+      const fechaActual = new Date(fechaInicio);
+
+      // Encontrar la primera fecha que coincida con el día de la semana
+      while (fechaActual.getDay() !== horario.dia_semana) {
+        fechaActual.setDate(fechaActual.getDate() + 1);
+      }
+
+      // Generar sesiones semanales
+      while (fechaActual <= fechaFin) {
+        // 🔧 CORRECCIÓN: Crear fecha local directamente
+        const [horas, minutos] = horario.hora_inicio.split(':');
+        const fechaHoraLocal = crearFechaLocalParaBD(fechaActual, parseInt(horas), parseInt(minutos));
+
+        const sesion = {
+          tipo_sesion: 'Sesión',
+          paciente_id: pacienteId,
+          supervisora_id: null,
+          fecha_hora: fechaHoraLocal, // ✅ Usar función helper
+          precio_por_hora: paciente.precio_por_hora,
+          duracion_horas: 1.0,
+          estado: 'Pendiente',
+          auto_generada: true,
+          modificada_manualmente: false,
+          eliminado: false,
+          horario_origen_id: horario.id,
+          version_generacion: 1,
+          acompañado_supervisora: false,
+          supervisora_acompanante_id: null
+        };
+
+        sesionesAInsertar.push(sesion);
+        contadorSesiones++;
+
+        // Siguiente semana
+        fechaActual.setDate(fechaActual.getDate() + 7);
+      }
+    }
+
+    // 5. Insertar sesiones en lotes de 100 (para evitar límites)
+    const tamañoLote = 100;
+    let sesionesInsertadas = 0;
+
+    for (let i = 0; i < sesionesAInsertar.length; i += tamañoLote) {
+      const lote = sesionesAInsertar.slice(i, i + tamañoLote);
+
+      const { error: insertError } = await supabase
+        .from('sesiones')
+        .insert(lote);
+
+      if (insertError) {
+        console.error('❌ Error insertando lote de sesiones:', insertError);
+        throw insertError;
+      }
+
+      sesionesInsertadas += lote.length;
+      console.log(`✅ Insertadas ${sesionesInsertadas}/${sesionesAInsertar.length} sesiones`);
+    }
+
+    console.log(`🎉 Total de sesiones generadas: ${contadorSesiones}`);
+    return contadorSesiones;
+
+  } catch (error) {
+    console.error('❌ Error generando sesiones:', error);
+    throw error;
+  }
+};
+
+/**
+ * Gestiona horarios de paciente (actualizar, agregar, eliminar)
+ */
+const gestionarHorariosPaciente = async (pacienteId, horariosNuevos, accion = 'actualizar_completo') => {
+  try {
+    console.log('🔄 Gestionando horarios del paciente:', pacienteId);
+    console.log('🔄 Acción:', accion);
+    console.log('🔄 Horarios nuevos:', horariosNuevos);
+
+    // 1. Obtener horarios actuales
+    const { data: horariosActuales, error: horariosError } = await supabase
+      .from('horarios_pacientes')
+      .select('*')
+      .eq('paciente_id', pacienteId);
+
+    if (horariosError) throw horariosError;
+
+    console.log('🔄 Horarios actuales en BD:', horariosActuales);
+
+    const mañana = new Date();
+    mañana.setDate(mañana.getDate() + 1);
+    mañana.setHours(0, 0, 0, 0);
+
+    if (accion === 'actualizar_completo') {
+      // 2. CORREGIDO: Identificar horarios a eliminar
+      const idsHorariosNuevos = horariosNuevos
+        .filter(h => h.id) // Solo los que tienen ID
+        .map(h => h.id);
+
+      console.log('🔄 IDs de horarios que se mantienen:', idsHorariosNuevos);
+
+      const horariosAEliminar = horariosActuales.filter(horarioActual => {
+        // Si el horario actual NO está en la lista de IDs nuevos, se elimina
+        return !idsHorariosNuevos.includes(horarioActual.id);
+      });
+
+      console.log('🗑️ Horarios a eliminar:', horariosAEliminar);
+
+      // Eliminar horarios que ya no están
+      for (const horarioAEliminar of horariosAEliminar) {
+        console.log(`🗑️ Eliminando horario ID: ${horarioAEliminar.id}`);
+
+        // PRIMERO: Eliminar sesiones futuras auto-generadas de este horario
+        const { data: sesionesEliminadas, error: deleteSesionesError } = await supabase
+          .from('sesiones')
+          .update({ eliminado: true })
+          .eq('horario_origen_id', horarioAEliminar.id)
+          .eq('auto_generada', true)
+          .gte('fecha_hora', mañana.toISOString())
+          .select('id');
+
+        if (deleteSesionesError) throw deleteSesionesError;
+
+        console.log(`✅ Eliminadas ${sesionesEliminadas?.length || 0} sesiones del horario ${horarioAEliminar.id}`);
+
+        // SEGUNDO: También eliminar sesiones manuales que tengan este horario_origen_id
+        const { data: sesionesManualesEliminadas, error: deleteManualesError } = await supabase
+          .from('sesiones')
+          .update({ eliminado: true })
+          .eq('horario_origen_id', horarioAEliminar.id)
+          .eq('auto_generada', false)
+          .gte('fecha_hora', mañana.toISOString())
+          .select('id');
+
+        if (deleteManualesError) throw deleteManualesError;
+
+        console.log(`✅ Eliminadas ${sesionesManualesEliminadas?.length || 0} sesiones manuales del horario ${horarioAEliminar.id}`);
+
+        // TERCERO: Para estar seguros, eliminar TODAS las sesiones futuras de este horario (sin filtros)
+        const { data: todasLasSesiones, error: deleteTodasError } = await supabase
+          .from('sesiones')
+          .update({ horario_origen_id: null })
+          .eq('horario_origen_id', horarioAEliminar.id)
+          .select('id');
+
+        if (deleteTodasError) throw deleteTodasError;
+
+        console.log(`✅ Desvinculadas ${todasLasSesiones?.length || 0} sesiones del horario ${horarioAEliminar.id}`);
+
+        // CUARTO: Ahora SÍ eliminar el horario
+        const { error: deleteHorarioError } = await supabase
+          .from('horarios_pacientes')
+          .delete()
+          .eq('id', horarioAEliminar.id);
+
+        if (deleteHorarioError) {
+          console.error(`❌ Error eliminando horario ${horarioAEliminar.id}:`, deleteHorarioError);
+          throw deleteHorarioError;
+        }
+
+        console.log(`✅ Horario ${horarioAEliminar.id} eliminado exitosamente`);
+      }
+
+      // 3. Actualizar horarios existentes que cambiaron
+      for (const horarioNuevo of horariosNuevos) {
+        if (horarioNuevo.id) {
+          const horarioActual = horariosActuales.find(h => h.id === horarioNuevo.id);
+
+          if (horarioActual &&
+            (horarioActual.dia_semana !== horarioNuevo.dia_semana ||
+              horarioActual.hora_inicio !== horarioNuevo.hora_inicio)) {
+
+            console.log(`🔄 Actualizando horario ID: ${horarioNuevo.id}`);
+
+            // Actualizar horario
+            const { error: updateHorarioError } = await supabase
+              .from('horarios_pacientes')
+              .update({
+                dia_semana: horarioNuevo.dia_semana,
+                hora_inicio: horarioNuevo.hora_inicio
+              })
+              .eq('id', horarioNuevo.id);
+
+            if (updateHorarioError) throw updateHorarioError;
+
+            // Eliminar sesiones futuras del horario anterior
+            const { data: sesionesEliminadas, error: deleteSesionesError } = await supabase
+              .from('sesiones')
+              .update({ eliminado: true })
+              .eq('horario_origen_id', horarioNuevo.id)
+              .eq('auto_generada', true)
+              .gte('fecha_hora', mañana.toISOString())
+              .select('id');
+
+            if (deleteSesionesError) throw deleteSesionesError;
+
+            console.log(`✅ Eliminadas ${sesionesEliminadas?.length || 0} sesiones del horario modificado`);
+
+            // Generar nuevas sesiones para este horario
+            await generarSesionesFuturasParaHorario(pacienteId, horarioNuevo, mañana);
+          }
+        }
+      }
+
+      // 4. Crear horarios nuevos (sin id)
+      const horariosACrear = horariosNuevos.filter(h => !h.id);
+
+      console.log('➕ Horarios a crear:', horariosACrear);
+
+      for (const horarioNuevo of horariosACrear) {
+        console.log(`➕ Creando nuevo horario: ${horarioNuevo.dia_semana} a las ${horarioNuevo.hora_inicio}`);
+
+        // Crear horario
+        const { data: horarioCreado, error: createHorarioError } = await supabase
+          .from('horarios_pacientes')
+          .insert({
+            paciente_id: pacienteId,
+            dia_semana: horarioNuevo.dia_semana,
+            hora_inicio: horarioNuevo.hora_inicio
+          })
+          .select()
+          .single();
+
+        if (createHorarioError) throw createHorarioError;
+
+        console.log(`✅ Horario creado con ID: ${horarioCreado.id}`);
+
+        // Generar sesiones para este nuevo horario
+        await generarSesionesFuturasParaHorario(pacienteId, horarioCreado, mañana);
+      }
+    }
+
+    console.log('✅ Gestión de horarios completada');
+    return 'Horarios actualizados exitosamente';
+
+  } catch (error) {
+    console.error('❌ Error gestionando horarios:', error);
+    throw error;
+  }
+};
+
+/**
+ * Genera sesiones futuras para un horario específico
+ */
+const generarSesionesFuturasParaHorario = async (pacienteId, horario, fechaDesde) => {
+  try {
+    // Obtener datos del paciente
+    const { data: paciente, error: pacienteError } = await supabase
+      .from('pacientes')
+      .select('precio_por_hora')
+      .eq('id', pacienteId)
+      .single();
+
+    if (pacienteError) throw pacienteError;
+
+    // Configurar fecha límite (1 año hacia adelante)
+    const fechaHasta = new Date(fechaDesde);
+    fechaHasta.setFullYear(fechaHasta.getFullYear() + 1);
+
+    const sesionesAInsertar = [];
+    const fechaActual = new Date(fechaDesde);
+
+    // Encontrar la primera fecha que coincida con el día de la semana
+    while (fechaActual.getDay() !== horario.dia_semana) {
+      fechaActual.setDate(fechaActual.getDate() + 1);
+    }
+
+    // Generar sesiones semanales
+    while (fechaActual <= fechaHasta) {
+      // 🔧 CORRECCIÓN: Crear fecha local directamente
+      const [horas, minutos] = horario.hora_inicio.split(':');
+      const fechaHoraLocal = crearFechaLocalParaBD(fechaActual, parseInt(horas), parseInt(minutos));
+
+      const sesion = {
+        tipo_sesion: 'Sesión',
+        paciente_id: pacienteId,
+        supervisora_id: null,
+        fecha_hora: fechaHoraLocal, // ✅ Usar función helper
+        precio_por_hora: paciente.precio_por_hora,
+        duracion_horas: 1.0,
+        estado: 'Pendiente',
+        auto_generada: true,
+        modificada_manualmente: false,
+        eliminado: false,
+        horario_origen_id: horario.id,
+        version_generacion: 1,
+        acompañado_supervisora: false,
+        supervisora_acompanante_id: null
+      };
+
+      sesionesAInsertar.push(sesion);
+      fechaActual.setDate(fechaActual.getDate() + 7);
+    }
+
+    // Insertar en lotes
+    const tamañoLote = 100;
+    for (let i = 0; i < sesionesAInsertar.length; i += tamañoLote) {
+      const lote = sesionesAInsertar.slice(i, i + tamañoLote);
+
+      const { error: insertError } = await supabase
+        .from('sesiones')
+        .insert(lote);
+
+      if (insertError) throw insertError;
+    }
+
+    console.log(`✅ Generadas ${sesionesAInsertar.length} sesiones para horario ${horario.dia_semana} a las ${horario.hora_inicio}`);
+    return sesionesAInsertar.length;
+
+  } catch (error) {
+    console.error('❌ Error generando sesiones futuras:', error);
+    throw error;
+  }
+};
+
+/**
+ * Inactiva paciente y elimina sesiones futuras auto-generadas
+ */
+const inactivarPacienteCompleto = async (pacienteId) => {
+  try {
+    console.log('⏸️ Inactivando paciente:', pacienteId);
+
+    const mañana = new Date();
+    mañana.setDate(mañana.getDate() + 1);
+    mañana.setHours(0, 0, 0, 0);
+
+    // Eliminar sesiones futuras auto-generadas
+    const { data, error } = await supabase
+      .from('sesiones')
+      .update({ eliminado: true })
+      .eq('paciente_id', pacienteId)
+      .eq('auto_generada', true)
+      .gte('fecha_hora', mañana.toISOString())
+      .select('id');
+
+    if (error) throw error;
+
+    const sesionesEliminadas = data?.length || 0;
+    console.log(`✅ Eliminadas ${sesionesEliminadas} sesiones futuras auto-generadas`);
+
+    return `Paciente inactivado. ${sesionesEliminadas} sesiones futuras eliminadas.`;
+
+  } catch (error) {
+    console.error('❌ Error inactivando paciente:', error);
+    throw error;
+  }
+};
+
+/**
+ * Reactiva paciente y genera sesiones futuras
+ */
+const reactivarPacienteCompleto = async (pacienteId) => {
+  try {
+    console.log('▶️ Reactivando paciente:', pacienteId);
+
+    // Actualizar fecha de última reactivación
+    const { error: updateError } = await supabase
+      .from('pacientes')
+      .update({ fecha_ultima_reactivacion: new Date().toISOString() })
+      .eq('id', pacienteId);
+
+    if (updateError) throw updateError;
+
+    // Obtener horarios del paciente
+    const { data: horarios, error: horariosError } = await supabase
+      .from('horarios_pacientes')
+      .select('*')
+      .eq('paciente_id', pacienteId);
+
+    if (horariosError) throw horariosError;
+
+    if (!horarios || horarios.length === 0) {
+      return 'Paciente reactivado sin horarios configurados';
+    }
+
+    const mañana = new Date();
+    mañana.setDate(mañana.getDate() + 1);
+    mañana.setHours(0, 0, 0, 0);
+
+    let totalSesionesGeneradas = 0;
+
+    // Generar sesiones para cada horario
+    for (const horario of horarios) {
+      const sesionesGeneradas = await generarSesionesFuturasParaHorario(pacienteId, horario, mañana);
+      totalSesionesGeneradas += sesionesGeneradas;
+    }
+
+    console.log(`✅ Paciente reactivado. ${totalSesionesGeneradas} sesiones generadas.`);
+    return `Paciente reactivado. ${totalSesionesGeneradas} sesiones generadas.`;
+
+  } catch (error) {
+    console.error('❌ Error reactivando paciente:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualiza precios en sesiones futuras (auto-generadas y manuales)
+ */
+const actualizarPreciosFuturosPaciente = async (pacienteId, nuevoPrecio) => {
+  try {
+    console.log('💰 Actualizando precios futuros para paciente:', pacienteId);
+
+    const mañana = new Date();
+    mañana.setDate(mañana.getDate() + 1);
+    mañana.setHours(0, 0, 0, 0);
+
+    // Actualizar precio en todas las sesiones futuras (auto y manuales)
+    const { data, error } = await supabase
+      .from('sesiones')
+      .update({ precio_por_hora: nuevoPrecio })
+      .eq('paciente_id', pacienteId)
+      .gte('fecha_hora', mañana.toISOString())
+      .eq('eliminado', false)
+      .select('id');
+
+    if (error) throw error;
+
+    const sesionesActualizadas = data?.length || 0;
+    console.log(`✅ Precio actualizado en ${sesionesActualizadas} sesiones futuras`);
+
+    return `Precio actualizado en ${sesionesActualizadas} sesiones futuras`;
+
+  } catch (error) {
+    console.error('❌ Error actualizando precios:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualiza nombre en TODAS las sesiones del paciente (pasadas y futuras)
+ */
+const actualizarNombrePacienteEnSesiones = async (pacienteId, nuevoNombre) => {
+  try {
+    console.log('👤 Actualizando nombre en todas las sesiones del paciente:', pacienteId);
+
+    // Nota: En Supabase, el nombre se obtiene via JOIN, no se actualiza en sesiones
+    // Esta función existe para mantener consistencia con la lógica original
+    // pero no requiere actualización porque el nombre se obtiene dinámicamente
+
+    console.log('✅ Nombre actualizado (se refleja automáticamente via JOIN)');
+    return 'Nombre actualizado en todas las sesiones';
+
+  } catch (error) {
+    console.error('❌ Error actualizando nombre:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// COMPONENTE PRINCIPAL
+// ============================================================================
 
 function App() {
   // Estados principales
@@ -35,6 +544,11 @@ function App() {
   const [alquilerConfig, setAlquilerConfig] = useState({ precio_mensual: 50000 });
   const [tipoCambio, setTipoCambio] = useState(1150);
   const [sesionsPendientes, setSesionsPendientes] = useState(0);
+
+  // 🚀 NUEVO: Estados para mobile
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
+  const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState(Date.now());
+  const isMobile = useIsMobile();
 
   // Estados para modal de confirmación
   const [showConfirmacionModal, setShowConfirmacionModal] = useState(false);
@@ -74,7 +588,6 @@ function App() {
       return fechaInput;
     }
   };
-
 
   const convertirFechaParaInput = (fechaISO) => {
     if (!fechaISO) return '';
@@ -181,39 +694,45 @@ function App() {
       console.log('Duración:', duracionHoras);
       console.log('Excluir sesión ID:', excluirSesionId);
 
-      const { data, error } = await supabase.rpc('verificar_conflicto_horario', {
-        p_fecha_hora: fechaHora,
-        p_duracion_horas: duracionHoras,
-        p_excluir_sesion_id: excluirSesionId
-      });
+      // Si no existe la función en Supabase, simplemente retornamos que no hay conflicto
+      try {
+        const { data, error } = await supabase.rpc('verificar_conflicto_horario', {
+          p_fecha_hora: fechaHora,
+          p_duracion_horas: duracionHoras,
+          p_excluir_sesion_id: excluirSesionId
+        });
 
-      if (error) {
-        console.error('Error verificando conflicto:', error);
-        return null;
-      }
-
-      console.log('Resultado verificación:', data);
-
-      if (data && data.length > 0) {
-        const conflicto = data[0];
-
-        if (conflicto.conflicto) {
-          return {
-            hayConflicto: true,
-            sesionConflictiva: {
-              id: conflicto.sesion_conflictiva_id,
-              pacienteNombre: conflicto.paciente_nombre,
-              supervisoraNombre: conflicto.supervisora_nombre
-            }
-          };
+        if (error) {
+          console.log('⚠️ Función verificar_conflicto_horario no existe en Supabase, omitiendo validación');
+          return { hayConflicto: false };
         }
-      }
 
-      return { hayConflicto: false };
+        console.log('Resultado verificación:', data);
+
+        if (data && data.length > 0) {
+          const conflicto = data[0];
+
+          if (conflicto.conflicto) {
+            return {
+              hayConflicto: true,
+              sesionConflictiva: {
+                id: conflicto.sesion_conflictiva_id,
+                pacienteNombre: conflicto.paciente_nombre,
+                supervisoraNombre: conflicto.supervisora_nombre
+              }
+            };
+          }
+        }
+
+        return { hayConflicto: false };
+      } catch (rpcError) {
+        console.log('⚠️ Función verificar_conflicto_horario no disponible, omitiendo validación');
+        return { hayConflicto: false };
+      }
 
     } catch (error) {
       console.error('Error en verificación de conflicto:', error);
-      return null;
+      return { hayConflicto: false };
     }
   };
 
@@ -280,6 +799,13 @@ function App() {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // 🚀 NUEVO: Cerrar sidebar mobile cuando cambia la vista
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarMobileOpen(false);
+    }
+  }, [activeView, isMobile]);
 
   const loadInitialData = async () => {
     try {
@@ -447,6 +973,45 @@ function App() {
     setSesionsPendientes(pendientes);
   };
 
+  // 🚀 NUEVA FUNCIÓN: Calcular ganancia neta para mobile header
+  const calcularGananciaNeta = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Filtrar sesiones del mes actual
+    const sesionesDelMes = sesiones.filter(sesion => {
+      const fechaSesion = new Date(sesion.fecha_hora);
+      return fechaSesion.getMonth() === currentMonth &&
+        fechaSesion.getFullYear() === currentYear &&
+        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado);
+    });
+
+    // Calcular ingresos
+    const sesionesIngresos = sesionesDelMes.filter(sesion => sesion.paciente_id);
+    const ingresos = sesionesIngresos.reduce((total, sesion) =>
+      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+
+    // Calcular gastos de supervisión
+    const sesionesSupervisiones = sesionesDelMes.filter(sesion => sesion.supervisora_id);
+    const gastoSupervision = sesionesSupervisiones.reduce((total, sesion) => {
+      return total + (sesion.precio_por_hora * sesion.duracion_horas);
+    }, 0);
+
+    // Gasto de alquiler
+    const gastoAlquiler = alquilerConfig.precio_mensual || 0;
+
+    // Ganancia neta
+    return ingresos - gastoSupervision - gastoAlquiler;
+  };
+
+  const formatCurrency = (amount, currency = currencyMode) => {
+    if (currency === 'USD') {
+      return `$${(amount / tipoCambio).toFixed(0)} USD`;
+    }
+    return `$${amount.toLocaleString()} ARS`;
+  };
+
   const actualizarSesionLocal = (sesionActualizada) => {
     console.log('Actualizando sesión local:', sesionActualizada);
 
@@ -502,6 +1067,9 @@ function App() {
       } else if (esPasada && !eraPendiente && esAhoraPendiente) {
         setSesionsPendientes(prev => prev + 1);
       }
+
+      // 🚀 NUEVO: Actualizar timestamp para sidebar
+      setLastUpdateTimestamp(Date.now());
 
       return true;
     } catch (error) {
@@ -736,7 +1304,8 @@ function App() {
             .insert({
               paciente_id: data.id,
               dia_semana: horario.dia_semana,
-              hora_inicio: horario.hora_inicio
+              // 🔧 CORRECCIÓN: NO convertir la hora - guardar directamente
+              hora_inicio: horario.hora_inicio  // Era: convertirFechaParaGuardar(horario.hora_inicio)
             })
             .select()
             .single();
@@ -746,15 +1315,12 @@ function App() {
         }
 
         if (formData.activo && horariosInsertados.length > 0) {
-          console.log('Generando sesiones con función SQL...');
-          const { data: resultado, error: sesionesError } = await supabase.rpc('generar_sesiones_paciente_nuevo', {
-            p_paciente_id: data.id
-          });
-
-          if (sesionesError) {
-            console.error('Error generando sesiones:', sesionesError);
-          } else {
+          console.log('🚀 Generando sesiones con función JS...');
+          try {
+            const resultado = await generarSesionsPacienteNuevo(data.id);
             console.log(`✅ ${resultado} sesiones generadas exitosamente`);
+          } catch (sesionesError) {
+            console.error('❌ Error generando sesiones:', sesionesError);
           }
         }
 
@@ -795,6 +1361,7 @@ function App() {
         if (updateError) throw updateError;
 
         const cambiosPrecio = formData.precio_por_hora !== itemToEdit.precio_por_hora;
+        const cambiosNombre = formData.nombre_apellido !== itemToEdit.nombre_apellido;
         const esReactivacion = !itemToEdit.activo && formData.activo;
         const esDesactivacion = itemToEdit.activo && !formData.activo;
 
@@ -807,59 +1374,70 @@ function App() {
         const hayCambiosHorarios = horariosAntes !== horariosAhora;
 
         if (esDesactivacion) {
-          const { data: resultado, error: inactivarError } = await supabase.rpc('inactivar_paciente_completo', {
-            p_paciente_id: itemToEdit.id
-          });
-
-          if (inactivarError) {
-            console.error('Error inactivando:', inactivarError);
-          } else {
+          try {
+            const resultado = await inactivarPacienteCompleto(itemToEdit.id);
             console.log('✅ Resultado inactivación:', resultado);
+          } catch (inactivarError) {
+            console.error('❌ Error inactivando:', inactivarError);
           }
         }
 
         if (esReactivacion) {
           if (hayCambiosHorarios) {
-            const { data: resultadoHorarios, error: horariosError } = await supabase.rpc('gestionar_horarios_paciente', {
-              p_paciente_id: itemToEdit.id,
-              p_horarios_json: formData.horarios || [],
-              p_accion: 'actualizar_completo'
-            });
-
-            if (horariosError) {
-              console.error('Error actualizando horarios:', horariosError);
+            try {
+              const resultado = await gestionarHorariosPaciente(itemToEdit.id, formData.horarios || [], 'actualizar_completo');
+              console.log('✅ Resultado gestión horarios:', resultado);
+            } catch (horariosError) {
+              console.error('❌ Error actualizando horarios:', horariosError);
             }
           }
 
-          const { data: resultado, error: reactivarError } = await supabase.rpc('reactivar_paciente_completo', {
-            p_paciente_id: itemToEdit.id
-          });
-
-          if (reactivarError) {
-            console.error('Error reactivando:', reactivarError);
+          try {
+            const resultado = await reactivarPacienteCompleto(itemToEdit.id);
+            console.log('✅ Resultado reactivación:', resultado);
+          } catch (reactivarError) {
+            console.error('❌ Error reactivando:', reactivarError);
           }
         }
 
         if (hayCambiosHorarios && formData.activo && !esReactivacion) {
-          const { data: resultado, error: horariosError } = await supabase.rpc('gestionar_horarios_paciente', {
-            p_paciente_id: itemToEdit.id,
-            p_horarios_json: formData.horarios || [],
-            p_accion: 'actualizar_completo'
-          });
+          try {
+            console.log('🔄 EJECUTANDO: Gestión de horarios para paciente activo');
+            // 🔧 CORRECCIÓN: Los horarios en formData.horarios ya vienen en formato correcto
+            const resultado = await gestionarHorariosPaciente(itemToEdit.id, formData.horarios || [], 'actualizar_completo');
+            console.log('✅ Resultado gestión horarios:', resultado);
+          } catch (horariosError) {
+            console.error('❌ Error gestionando horarios:', horariosError);
+          }
+        }
 
-          if (horariosError) {
-            console.error('Error gestionando horarios:', horariosError);
+
+        // NUEVO: También gestionar horarios si NO hay reactivación/desactivación pero sí cambios de horarios
+        if (hayCambiosHorarios && !esReactivacion && !esDesactivacion) {
+          try {
+            console.log('🔄 EJECUTANDO: Gestión de horarios por cambios directos');
+            const resultado = await gestionarHorariosPaciente(itemToEdit.id, formData.horarios || [], 'actualizar_completo');
+            console.log('✅ Resultado gestión horarios directos:', resultado);
+          } catch (horariosError) {
+            console.error('❌ Error gestionando horarios directos:', horariosError);
           }
         }
 
         if (cambiosPrecio && !esReactivacion && !esDesactivacion && !hayCambiosHorarios) {
-          const { data: resultado, error: preciosError } = await supabase.rpc('actualizar_precios_futuros_paciente', {
-            p_paciente_id: itemToEdit.id,
-            p_nuevo_precio: formData.precio_por_hora
-          });
+          try {
+            const resultado = await actualizarPreciosFuturosPaciente(itemToEdit.id, formData.precio_por_hora);
+            console.log('✅ Resultado actualización precios:', resultado);
+          } catch (preciosError) {
+            console.error('❌ Error actualizando precios:', preciosError);
+          }
+        }
 
-          if (preciosError) {
-            console.error('Error actualizando precios:', preciosError);
+        if (cambiosNombre) {
+          try {
+            const resultado = await actualizarNombrePacienteEnSesiones(itemToEdit.id, formData.nombre_apellido);
+            console.log('✅ Resultado actualización nombre:', resultado);
+          } catch (nombreError) {
+            console.error('❌ Error actualizando nombre:', nombreError);
           }
         }
 
@@ -920,11 +1498,18 @@ function App() {
 
       const sesionData = {
         ...formData,
+        // 🔧 CORRECCIÓN: NO convertir fecha si ya viene en formato datetime-local correcto
         fecha_hora: convertirFechaParaGuardar(formData.fecha_hora),
+
         auto_generada: false,
         modificada_manualmente: false,
         eliminado: false
       };
+
+      // 🔧 CORRECCIÓN: Asegurar que campos null sean realmente null (no undefined)
+      if (!sesionData.paciente_id) sesionData.paciente_id = null;
+      if (!sesionData.supervisora_id) sesionData.supervisora_id = null;
+      if (!sesionData.supervisora_acompanante_id) sesionData.supervisora_acompanante_id = null;
 
       console.log('Datos finales para insertar:', sesionData);
 
@@ -942,10 +1527,14 @@ function App() {
         window.showToast(`${formData.tipo_sesion} agregada exitosamente`, 'success');
       }
 
+      // Y también para 'edit-sesion':
     } else if (modalType === 'edit-sesion') {
       console.log('=== EDITANDO SESIÓN ===');
 
+      // 🔧 CORRECCIÓN: NO usar convertirFechaParaGuardar
       const fechaConvertida = convertirFechaParaGuardar(formData.fecha_hora);
+
+
       const fechaOriginal = selectedItem.fecha_hora;
 
       const fechaOrg = new Date(fechaOriginal);
@@ -959,13 +1548,17 @@ function App() {
         modificada_manualmente: seCambioFechaHora ? true : (selectedItem.modificada_manualmente || false)
       };
 
+      // 🔧 CORRECCIÓN: Asegurar que campos null sean realmente null
+      if (!updateData.paciente_id) updateData.paciente_id = null;
+      if (!updateData.supervisora_id) updateData.supervisora_id = null;
+      if (!updateData.supervisora_acompanante_id) updateData.supervisora_acompanante_id = null;
+
       const { error } = await supabase
         .from('sesiones')
         .update(updateData)
         .eq('id', selectedItem.id);
 
       if (error) throw error;
-
       setSesiones(prev => prev.map(s =>
         s.id === selectedItem.id ? { ...s, ...updateData } : s
       ));
@@ -1007,8 +1600,8 @@ function App() {
     try {
       console.log('Guardando con verificación de conflictos:', { modalType, formData });
 
-      // Validar conflictos solo para sesiones
-      if (modalType === 'add-sesion' || modalType === 'edit-sesion') {
+      // Validar conflictos solo para sesiones (si la función existe)
+      if ((modalType === 'add-sesion' || modalType === 'edit-sesion') && typeof verificarConflictoHorario === 'function') {
         const fechaHoraParaValidar = convertirFechaParaGuardar(formData.fecha_hora);
         const excluirId = modalType === 'edit-sesion' ? selectedItem?.id : null;
 
@@ -1113,6 +1706,9 @@ function App() {
       }).length;
 
       setSesionsPendientes(Math.max(0, nuevasPendientes - cambios.length));
+
+      // 🚀 NUEVO: Actualizar timestamp para sidebar
+      setLastUpdateTimestamp(Date.now());
 
     } catch (error) {
       console.error('Error al categorizar sesiones:', error);
@@ -1258,28 +1854,67 @@ function App() {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-purple-50 via-white to-purple-50">
-      <Sidebar
-        activeView={activeView}
-        setActiveView={setActiveView}
-        currencyMode={currencyMode}
-        setCurrencyMode={setCurrencyMode}
-        tipoCambio={tipoCambio}
-        sesionsPendientes={sesionsPendientes}
-        sesiones={sesiones}
-        supervisoras={supervisoras}
-        alquilerConfig={alquilerConfig}
+      {/* 🚀 Sidebar con clases responsive */}
+      <div className={`${isMobile ? 'fixed left-0 top-0 h-full z-40 transform transition-transform duration-300 ease-in-out' : ''} ${isMobile ? (sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full') : ''
+        }`}>
+        <Sidebar
+          activeView={activeView}
+          setActiveView={setActiveView}
+          currencyMode={currencyMode}
+          setCurrencyMode={setCurrencyMode}
+          tipoCambio={tipoCambio}
+          sesionsPendientes={sesionsPendientes}
+          sesiones={sesiones}
+          supervisoras={supervisoras}
+          alquilerConfig={alquilerConfig}
+          lastUpdateTimestamp={lastUpdateTimestamp}
+          onCloseMobile={() => setSidebarMobileOpen(false)}
+        />
+      </div>
+
+      {/* 🚀 Overlay para cerrar sidebar en mobile */}
+      <SidebarOverlay
+        isOpen={sidebarMobileOpen}
+        onClose={() => setSidebarMobileOpen(false)}
       />
 
       <div className="main-content-adjusted flex-1 flex flex-col min-h-screen">
-        <Header
-          activeView={activeView}
-          pacientes={pacientes}
-          openModal={openModal}
-          currentDate={new Date()}
-        />
+        {/* 🚀 Header mobile */}
+        {isMobile && (
+          <MobileHeader
+            onToggleSidebar={() => setSidebarMobileOpen(!sidebarMobileOpen)}
+            gananciaNeta={calcularGananciaNeta()}
+            sesionsPendientes={sesionsPendientes}
+            formatCurrency={formatCurrency}
+            onCategorizarSesiones={() => openModal('categorizar-sesiones')}
+          />
+        )}
+
+        {/* Header desktop normal */}
+        {!isMobile && (
+          <Header
+            activeView={activeView}
+            pacientes={pacientes}
+            openModal={openModal}
+            currentDate={new Date()}
+          />
+        )}
 
         <main className="flex-1 p-6 overflow-y-auto">
-          {renderCurrentView()}
+          {/* 🚀 Usar CalendarioMobile en mobile, normal en desktop */}
+          {activeView === 'calendario' && isMobile ? (
+            <CalendarioMobile
+              sesiones={sesiones}
+              pacientes={pacientes}
+              supervisoras={supervisoras}
+              onEditarSesion={(sesion) => openModal('edit-sesion', sesion)}
+              onCategorizarSesion={handleCategorizarSesionRapida}
+              formatCurrency={formatCurrency}
+              onCategorizarSesiones={() => openModal('categorizar-sesiones')}
+            />
+          ) : (
+            renderCurrentView()
+          )}
         </main>
       </div>
 

@@ -27,16 +27,44 @@ const EntradaSView = ({
   const [showEliminados, setShowEliminados] = useState(false);
   const [showFiltros, setShowFiltros] = useState(false);
 
+  // 🚀 NUEVO: Estado para mostrar el mes hasta el cual se calcula saldo
+  const [mesHastaSaldo, setMesHastaSaldo] = useState(null);
+
   // Cargar entradas y tipo de cambio al montar el componente
   useEffect(() => {
     cargarEntradas();
     obtenerTipoCambio();
+    calcularMesHastaSaldo();
   }, []);
 
   // Recargar cuando cambie el toggle eliminados
   useEffect(() => {
     cargarEntradas();
   }, [showEliminados]);
+
+  // 🚀 NUEVA FUNCIÓN: Calcular hasta qué mes incluir (misma lógica que FacturarView)
+  const calcularMesHastaSaldo = () => {
+    const hoy = new Date();
+    const diaDelMes = hoy.getDate();
+
+    let mesHasta;
+    if (diaDelMes <= 9) {
+      // Del 1 al 9: incluir hasta mes anterior
+      mesHasta = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    } else {
+      // Del 10 al 31: incluir hasta mes actual
+      mesHasta = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    }
+
+    console.log('🗓️ Calculando saldo hasta:', {
+      fechaHoy: hoy.toISOString().split('T')[0],
+      diaDelMes,
+      mesHasta: mesHasta.toISOString().split('T')[0],
+      logica: diaDelMes <= 9 ? 'Hasta mes anterior' : 'Hasta mes actual'
+    });
+
+    setMesHastaSaldo(mesHasta);
+  };
 
   const obtenerTipoCambio = async () => {
     try {
@@ -582,14 +610,15 @@ const EntradaSView = ({
           entrada={editingEntrada}
           pacientes={pacientes}
           tipoCambio={tipoCambioActual}
+          mesHastaSaldo={mesHastaSaldo}
         />
       )}
     </div>
   );
 };
 
-// Modal Component
-const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio }) => {
+// Modal Component - ACTUALIZADO CON NUEVA LÓGICA DE SALDO
+const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio, mesHastaSaldo }) => {
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split('T')[0],
     paciente_id: '',
@@ -608,6 +637,7 @@ const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio 
   const [nuevoSaldo, setNuevoSaldo] = useState(0);
   const [uploading, setUploading] = useState({ comprobante: false, factura: false });
   const [perfilConfig, setPerfilConfig] = useState({ nombre_completo: 'Victoria Güemes' });
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
 
   useEffect(() => {
     cargarPerfilConfig();
@@ -645,20 +675,55 @@ const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio 
     }
   };
 
+  // 🚀 NUEVA FUNCIÓN: Calcular saldo usando la view (misma lógica que FacturarView)
   const calcularSaldoPaciente = async (pacienteId) => {
+    if (!mesHastaSaldo) {
+      console.warn('mesHastaSaldo no está configurado aún');
+      return;
+    }
+
     try {
+      setLoadingSaldo(true);
+      console.log('💰 Calculando saldo del paciente:', pacienteId, 'hasta:', mesHastaSaldo.toISOString().split('T')[0]);
+
+      const año = mesHastaSaldo.getFullYear();
+      const mes = mesHastaSaldo.getMonth() + 1;
+
       const { data, error } = await supabase
-        .rpc('calcular_saldo_paciente', { p_paciente_id: pacienteId });
+        .from('resumen_facturacion_mensual')
+        .select('total_final, debug_sesiones_anteriores, debug_pagos_totales')
+        .eq('paciente_id', pacienteId)
+        .eq('año', año)
+        .eq('mes', mes)
+        .single();
 
-      if (error) throw error;
-      setSaldoPaciente(data || 0);
-
-      if (!entrada && data > 0) {
-        setFormData(prev => ({ ...prev, monto_ars: data }));
+      if (error && error.code !== 'PGRST116') {
+        throw error;
       }
+
+      const saldoCalculado = data?.total_final || 0;
+      console.log('💰 Saldo calculado:', {
+        pacienteId,
+        hasta: `${año}-${mes}`,
+        saldo: saldoCalculado,
+        debug: data ? {
+          sesiones_anteriores: data.debug_sesiones_anteriores,
+          pagos_totales: data.debug_pagos_totales
+        } : 'Sin datos'
+      });
+
+      setSaldoPaciente(saldoCalculado);
+
+      // Auto-completar monto si no existe entrada y hay saldo positivo
+      if (!entrada && saldoCalculado > 0) {
+        setFormData(prev => ({ ...prev, monto_ars: saldoCalculado }));
+      }
+
     } catch (error) {
       console.error('Error calculando saldo:', error);
       setSaldoPaciente(0);
+    } finally {
+      setLoadingSaldo(false);
     }
   };
 
@@ -722,6 +787,13 @@ const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio 
 
   if (!isOpen) return null;
 
+  const formatCurrency = (amount) => `$${amount.toLocaleString()} ARS`;
+
+  const nombreMesHasta = mesHastaSaldo ? mesHastaSaldo.toLocaleDateString('es-AR', {
+    month: 'long',
+    year: 'numeric'
+  }) : '';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
       <div className="modal-content max-w-3xl w-full mx-4 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -765,32 +837,41 @@ const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio 
             </div>
           </div>
 
-          {/* Saldo del paciente */}
+          {/* 🚀 NUEVO: Saldo del paciente con lógica consistente */}
           {formData.paciente_id && (
             <div className="bg-blue-50 p-4 rounded-lg">
               <h4 className="font-medium text-blue-800 mb-2">Información del Paciente</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-blue-700">Saldo actual:</span>
-                  <span className={`ml-2 font-bold ${saldoPaciente >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    ${saldoPaciente.toLocaleString()} ARS
-                  </span>
-                  <div className="text-xs text-blue-600 mt-1">
-                    {saldoPaciente > 0 ? 'El paciente debe dinero' : saldoPaciente < 0 ? 'A favor del paciente' : 'Sin deuda'}
-                  </div>
-                </div>
-                {formData.monto_ars && (
+              {loadingSaldo ? (
+                <div className="text-blue-600">Calculando saldo...</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-blue-700">Saldo después del pago:</span>
-                    <span className={`ml-2 font-bold ${nuevoSaldo >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      ${nuevoSaldo.toLocaleString()} ARS
+                    <span className="text-blue-700">Saldo actual:</span>
+                    <span className={`ml-2 font-bold ${saldoPaciente >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(saldoPaciente)}
                     </span>
                     <div className="text-xs text-blue-600 mt-1">
-                      {nuevoSaldo > 0 ? 'Seguirá debiendo' : nuevoSaldo < 0 ? 'Quedará a favor' : 'Quedará al día'}
+                      {saldoPaciente > 0 ? 'El paciente debe dinero' : saldoPaciente < 0 ? 'A favor del paciente' : 'Sin deuda'}
                     </div>
+                    {nombreMesHasta && (
+                      <div className="text-xs text-blue-500 mt-1">
+                        📅 Incluye sesiones hasta {nombreMesHasta}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                  {formData.monto_ars && (
+                    <div>
+                      <span className="text-blue-700">Saldo después del pago:</span>
+                      <span className={`ml-2 font-bold ${nuevoSaldo >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(nuevoSaldo)}
+                      </span>
+                      <div className="text-xs text-blue-600 mt-1">
+                        {nuevoSaldo > 0 ? 'Seguirá debiendo' : nuevoSaldo < 0 ? 'Quedará a favor' : 'Quedará al día'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -960,7 +1041,7 @@ const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio 
             <button
               type="submit"
               className="btn-primary text-white px-6 py-2 rounded-lg"
-              disabled={uploading.comprobante || uploading.factura}
+              disabled={uploading.comprobante || uploading.factura || loadingSaldo}
             >
               {entrada ? 'Actualizar' : 'Guardar'}
             </button>

@@ -29,16 +29,44 @@ const SalidasView = ({
   const [showEliminados, setShowEliminados] = useState(false);
   const [showFiltros, setShowFiltros] = useState(false);
 
+  // 🚀 NUEVO: Estado para mostrar el mes hasta el cual se calcula saldo
+  const [mesHastaSaldo, setMesHastaSaldo] = useState(null);
+
   // Cargar salidas y tipo de cambio al montar el componente
   useEffect(() => {
     cargarSalidas();
     obtenerTipoCambio();
+    calcularMesHastaSaldo();
   }, []);
 
   // Recargar cuando cambie el toggle eliminados
   useEffect(() => {
     cargarSalidas();
   }, [showEliminados]);
+
+  // 🚀 NUEVA FUNCIÓN: Calcular hasta qué mes incluir (misma lógica que EntradaSView)
+  const calcularMesHastaSaldo = () => {
+    const hoy = new Date();
+    const diaDelMes = hoy.getDate();
+
+    let mesHasta;
+    if (diaDelMes <= 9) {
+      // Del 1 al 9: incluir hasta mes anterior
+      mesHasta = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    } else {
+      // Del 10 al 31: incluir hasta mes actual
+      mesHasta = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    }
+
+    console.log('🗓️ Calculando saldo gastos hasta:', {
+      fechaHoy: hoy.toISOString().split('T')[0],
+      diaDelMes,
+      mesHasta: mesHasta.toISOString().split('T')[0],
+      logica: diaDelMes <= 9 ? 'Hasta mes anterior' : 'Hasta mes actual'
+    });
+
+    setMesHastaSaldo(mesHasta);
+  };
 
   const obtenerTipoCambio = async () => {
     try {
@@ -633,14 +661,15 @@ const SalidasView = ({
           supervisoras={supervisoras}
           tipoCambio={tipoCambioActual}
           alquilerConfig={alquilerConfig}
+          mesHastaSaldo={mesHastaSaldo}
         />
       )}
     </div>
   );
 };
 
-// Modal Component actualizado con función SQL
-const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio, alquilerConfig }) => {
+// 🚀 MODAL ACTUALIZADO CON NUEVA VIEW DE SUPERVISORAS
+const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio, alquilerConfig, mesHastaSaldo }) => {
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split('T')[0],
     concepto: '',
@@ -657,6 +686,7 @@ const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio
   const [saldoInfo, setSaldoInfo] = useState({ saldoActual: 0, nuevoSaldo: 0 });
   const [uploading, setUploading] = useState({ comprobante: false, factura: false });
   const [perfilConfig, setPerfilConfig] = useState({ nombre_completo: 'Victoria Güemes' });
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
 
   // Cargar configuración de perfil
   useEffect(() => {
@@ -698,32 +728,56 @@ const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio
     }
   };
 
-  // FUNCIÓN CORREGIDA: Usar la función SQL
+  // 🚀 NUEVA FUNCIÓN: Calcular saldo supervisora usando la view (misma lógica que EntradaSView)
   const calcularSaldoSupervisora = async (supervisoraId) => {
+    if (!mesHastaSaldo) {
+      console.warn('mesHastaSaldo no está configurado aún');
+      return;
+    }
+
     try {
-      console.log('Calculando saldo para supervisora:', supervisoraId);
+      setLoadingSaldo(true);
+      console.log('💰 Calculando saldo supervisora:', supervisoraId, 'hasta:', mesHastaSaldo.toISOString().split('T')[0]);
 
-      // Usar la función SQL que creamos
-      const { data: saldoActual, error } = await supabase
-        .rpc('calcular_saldo_supervisora', { p_supervisora_id: supervisoraId });
+      const año = mesHastaSaldo.getFullYear();
+      const mes = mesHastaSaldo.getMonth() + 1;
 
-      if (error) {
-        console.error('Error en función SQL:', error);
+      const { data, error } = await supabase
+        .from('resumen_gastos_supervisoras_mensual')
+        .select('total_final, debug_supervisiones_anteriores, debug_acompanamientos_anteriores, debug_pagos_realizados')
+        .eq('supervisora_id', supervisoraId)
+        .eq('año', año)
+        .eq('mes', mes)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
-      console.log('Saldo calculado por función SQL:', saldoActual);
+      const saldoCalculado = data?.total_final || 0;
+      console.log('💰 Saldo supervisora calculado:', {
+        supervisoraId,
+        hasta: `${año}-${mes}`,
+        saldo: saldoCalculado,
+        debug: data ? {
+          supervisiones_anteriores: data.debug_supervisiones_anteriores,
+          acompanamientos_anteriores: data.debug_acompanamientos_anteriores,
+          pagos_realizados: data.debug_pagos_realizados
+        } : 'Sin datos'
+      });
 
-      setSaldoInfo({ saldoActual: saldoActual || 0, nuevoSaldo: saldoActual || 0 });
+      setSaldoInfo({ saldoActual: saldoCalculado, nuevoSaldo: saldoCalculado });
 
-      // Si no estamos editando y hay saldo pendiente, ponerlo como monto por defecto
-      if (!salida && (saldoActual || 0) > 0) {
-        setFormData(prev => ({ ...prev, monto_ars: saldoActual }));
+      // Auto-completar monto si no existe entrada y hay saldo positivo
+      if (!salida && saldoCalculado > 0) {
+        setFormData(prev => ({ ...prev, monto_ars: saldoCalculado }));
       }
 
     } catch (error) {
       console.error('Error calculando saldo supervisora:', error);
       setSaldoInfo({ saldoActual: 0, nuevoSaldo: 0 });
+    } finally {
+      setLoadingSaldo(false);
     }
   };
 
@@ -860,6 +914,13 @@ const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio
 
   if (!isOpen) return null;
 
+  const formatCurrency = (amount) => `$${amount.toLocaleString()} ARS`;
+
+  const nombreMesHasta = mesHastaSaldo ? mesHastaSaldo.toLocaleDateString('es-AR', {
+    month: 'long',
+    year: 'numeric'
+  }) : '';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
       <div className="modal-content max-w-3xl w-full mx-4 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -931,36 +992,45 @@ const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio
             )}
           </div>
 
-          {/* Información de saldo */}
+          {/* 🚀 NUEVO: Información de saldo con lógica consistente */}
           {(formData.concepto === 'Supervisión' && formData.supervisora_id) || formData.concepto === 'Alquiler' ? (
             <div className="bg-orange-50 p-4 rounded-lg">
               <h4 className="font-medium text-orange-800 mb-2">
                 Información de {formData.concepto === 'Alquiler' ? 'Alquiler' : 'Supervisión'}
               </h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-orange-700">Saldo pendiente:</span>
-                  <span className={`ml-2 font-bold ${saldoInfo.saldoActual >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    ${saldoInfo.saldoActual.toLocaleString()} ARS
-                  </span>
-                  <div className="text-xs text-orange-600 mt-1">
-                    {formData.concepto === 'Alquiler'
-                      ? 'Calculado desde mayo 2025'
-                      : 'Por sesiones realizadas pendientes de pago'}
-                  </div>
-                </div>
-                {formData.monto_ars && (
+              {loadingSaldo ? (
+                <div className="text-orange-600">Calculando saldo...</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-orange-700">Saldo después del pago:</span>
-                    <span className={`ml-2 font-bold ${saldoInfo.nuevoSaldo >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      ${saldoInfo.nuevoSaldo.toLocaleString()} ARS
+                    <span className="text-orange-700">Saldo pendiente:</span>
+                    <span className={`ml-2 font-bold ${saldoInfo.saldoActual >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(saldoInfo.saldoActual)}
                     </span>
                     <div className="text-xs text-orange-600 mt-1">
-                      {saldoInfo.nuevoSaldo > 0 ? 'Seguirá pendiente' : saldoInfo.nuevoSaldo < 0 ? 'Pago en exceso' : 'Quedará al día'}
+                      {formData.concepto === 'Alquiler'
+                        ? 'Calculado desde mayo 2025'
+                        : 'Por supervisiones y acompañamientos'}
                     </div>
+                    {nombreMesHasta && formData.concepto === 'Supervisión' && (
+                      <div className="text-xs text-orange-500 mt-1">
+                        📅 Incluye hasta {nombreMesHasta}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                  {formData.monto_ars && (
+                    <div>
+                      <span className="text-orange-700">Saldo después del pago:</span>
+                      <span className={`ml-2 font-bold ${saldoInfo.nuevoSaldo >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(saldoInfo.nuevoSaldo)}
+                      </span>
+                      <div className="text-xs text-orange-600 mt-1">
+                        {saldoInfo.nuevoSaldo > 0 ? 'Seguirá pendiente' : saldoInfo.nuevoSaldo < 0 ? 'Pago en exceso' : 'Quedará al día'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : null}
 
@@ -1120,7 +1190,7 @@ const SalidaModal = ({ isOpen, onClose, onSave, salida, supervisoras, tipoCambio
             <button
               type="submit"
               className="btn-primary text-white px-6 py-2 rounded-lg"
-              disabled={uploading.comprobante || uploading.factura}
+              disabled={uploading.comprobante || uploading.factura || loadingSaldo}
             >
               {salida ? 'Actualizar' : 'Guardar'}
             </button>

@@ -3,6 +3,196 @@ import { Edit3, Trash2, Search, UserCheck, UserX, Calendar, DollarSign } from 'l
 import ConfirmModal from './ConfirmModal';
 import { supabase } from '../lib/supabase';
 
+// ============================================================================
+// 🚀 FUNCIONES JS IMPORTADAS DE APP.JS (para usar en PacientesView)
+// ============================================================================
+
+const convertirFechaParaGuardar = (fechaInput) => {
+  if (!fechaInput) return null;
+
+  try {
+    const [fechaStr, horaStr] = fechaInput.split('T');
+    const [año, mes, dia] = fechaStr.split('-').map(Number);
+    const [hora, minuto] = horaStr.split(':').map(Number);
+
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${año}-${pad(mes)}-${pad(dia)} ${pad(hora)}:${pad(minuto)}:00`;
+  } catch (error) {
+    console.error('❌ Error convirtiendo fecha para guardar:', error);
+    return fechaInput;
+  }
+};
+
+
+
+/**
+ * Inactiva paciente y elimina sesiones futuras auto-generadas
+ */
+const inactivarPacienteCompleto = async (pacienteId) => {
+  try {
+    console.log('⏸️ Inactivando paciente:', pacienteId);
+
+    const mañana = new Date();
+    mañana.setDate(mañana.getDate() + 1);
+    mañana.setHours(0, 0, 0, 0);
+
+    // Eliminar sesiones futuras auto-generadas
+    const { data, error } = await supabase
+      .from('sesiones')
+      .update({ eliminado: true })
+      .eq('paciente_id', pacienteId)
+      .eq('auto_generada', true)
+      .gte('fecha_hora', mañana.toISOString())
+      .select('id');
+
+    if (error) throw error;
+
+    const sesionesEliminadas = data?.length || 0;
+    console.log(`✅ Eliminadas ${sesionesEliminadas} sesiones futuras auto-generadas`);
+
+    return `Paciente inactivado. ${sesionesEliminadas} sesiones futuras eliminadas.`;
+
+  } catch (error) {
+    console.error('❌ Error inactivando paciente:', error);
+    throw error;
+  }
+};
+
+/**
+ * Genera sesiones futuras para un horario específico
+ */
+const generarSesionesFuturasParaHorario = async (pacienteId, horario, fechaDesde) => {
+  try {
+    // Obtener datos del paciente
+    const { data: paciente, error: pacienteError } = await supabase
+      .from('pacientes')
+      .select('precio_por_hora')
+      .eq('id', pacienteId)
+      .single();
+
+    if (pacienteError) throw pacienteError;
+
+    // Configurar fecha límite (1 año hacia adelante)
+    const fechaHasta = new Date(fechaDesde);
+    fechaHasta.setFullYear(fechaHasta.getFullYear() + 1);
+
+    const sesionesAInsertar = [];
+    const fechaActual = new Date(fechaDesde);
+
+    // Encontrar la primera fecha que coincida con el día de la semana
+    while (fechaActual.getDay() !== horario.dia_semana) {
+      fechaActual.setDate(fechaActual.getDate() + 1);
+    }
+
+    // Generar sesiones semanales
+    while (fechaActual <= fechaHasta) {
+      const [horas, minutos] = horario.hora_inicio.split(':');
+      const fechaHora = new Date(fechaActual);
+      fechaHora.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+
+      // 🔧 CORRECCIÓN: Crear fecha local directamente sin conversión UTC
+      const año = fechaHora.getFullYear();
+      const mes = String(fechaHora.getMonth() + 1).padStart(2, '0');
+      const dia = String(fechaHora.getDate()).padStart(2, '0');
+      const horasStr = String(fechaHora.getHours()).padStart(2, '0');
+      const minutosStr = String(fechaHora.getMinutes()).padStart(2, '0');
+
+      const fechaHoraLocal = `${año}-${mes}-${dia} ${horasStr}:${minutosStr}:00`;
+
+      const sesion = {
+        tipo_sesion: 'Sesión',
+        paciente_id: pacienteId,
+        supervisora_id: null,
+        fecha_hora: fechaHoraLocal, // ✅ Usar fecha local directa
+        precio_por_hora: paciente.precio_por_hora,
+        duracion_horas: 1.0,
+        estado: 'Pendiente',
+        auto_generada: true,
+        modificada_manualmente: false,
+        eliminado: false,
+        horario_origen_id: horario.id,
+        version_generacion: 1,
+        acompañado_supervisora: false,
+        supervisora_acompanante_id: null
+      };
+
+      sesionesAInsertar.push(sesion);
+      fechaActual.setDate(fechaActual.getDate() + 7);
+    }
+
+    // Insertar en lotes
+    const tamañoLote = 100;
+    for (let i = 0; i < sesionesAInsertar.length; i += tamañoLote) {
+      const lote = sesionesAInsertar.slice(i, i + tamañoLote);
+
+      const { error: insertError } = await supabase
+        .from('sesiones')
+        .insert(lote);
+
+      if (insertError) throw insertError;
+    }
+
+    console.log(`✅ Generadas ${sesionesAInsertar.length} sesiones para horario ${horario.dia_semana} a las ${horario.hora_inicio}`);
+    return sesionesAInsertar.length;
+
+  } catch (error) {
+    console.error('❌ Error generando sesiones futuras:', error);
+    throw error;
+  }
+};
+
+/**
+ * Reactiva paciente y genera sesiones futuras
+ */
+const reactivarPacienteCompleto = async (pacienteId) => {
+  try {
+    console.log('▶️ Reactivando paciente:', pacienteId);
+
+    // Actualizar fecha de última reactivación
+    const { error: updateError } = await supabase
+      .from('pacientes')
+      .update({ fecha_ultima_reactivacion: new Date().toISOString() })
+      .eq('id', pacienteId);
+
+    if (updateError) throw updateError;
+
+    // Obtener horarios del paciente
+    const { data: horarios, error: horariosError } = await supabase
+      .from('horarios_pacientes')
+      .select('*')
+      .eq('paciente_id', pacienteId);
+
+    if (horariosError) throw horariosError;
+
+    if (!horarios || horarios.length === 0) {
+      return 'Paciente reactivado sin horarios configurados';
+    }
+
+    const mañana = new Date();
+    mañana.setDate(mañana.getDate() + 1);
+    mañana.setHours(0, 0, 0, 0);
+
+    let totalSesionesGeneradas = 0;
+
+    // Generar sesiones para cada horario
+    for (const horario of horarios) {
+      const sesionesGeneradas = await generarSesionesFuturasParaHorario(pacienteId, horario, mañana);
+      totalSesionesGeneradas += sesionesGeneradas;
+    }
+
+    console.log(`✅ Paciente reactivado. ${totalSesionesGeneradas} sesiones generadas.`);
+    return `Paciente reactivado. ${totalSesionesGeneradas} sesiones generadas.`;
+
+  } catch (error) {
+    console.error('❌ Error reactivando paciente:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// COMPONENTE PRINCIPAL
+// ============================================================================
+
 const PacientesView = ({
   pacientes,
   setPacientes,
@@ -78,25 +268,19 @@ const PacientesView = ({
       // Si se desactiva, eliminar sesiones futuras
       if (!nuevoEstado) {
         console.log('Inactivando paciente y eliminando sesiones futuras...');
-        const { data: resultado, error: inactivarError } = await supabase.rpc('inactivar_paciente_completo', {
-          p_paciente_id: pacienteId
-        });
-
-        if (inactivarError) {
-          console.error('Error inactivando:', inactivarError);
-        } else {
+        try {
+          const resultado = await inactivarPacienteCompleto(pacienteId);
           console.log('✅ Paciente inactivado:', resultado);
+        } catch (inactivarError) {
+          console.error('Error inactivando:', inactivarError);
         }
       } else {
         console.log('Reactivando paciente y generando sesiones futuras...');
-        const { data: resultado, error: reactivarError } = await supabase.rpc('reactivar_paciente_completo', {
-          p_paciente_id: pacienteId
-        });
-
-        if (reactivarError) {
-          console.error('Error reactivando:', reactivarError);
-        } else {
+        try {
+          const resultado = await reactivarPacienteCompleto(pacienteId);
           console.log('✅ Paciente reactivado:', resultado);
+        } catch (reactivarError) {
+          console.error('Error reactivando:', reactivarError);
         }
       }
 
@@ -139,14 +323,11 @@ const PacientesView = ({
 
       // Eliminar sesiones futuras (paciente ya quedó inactivo)
       console.log('Eliminando sesiones futuras del paciente eliminado...');
-      const { data: resultado, error: inactivarError } = await supabase.rpc('inactivar_paciente_completo', {
-        p_paciente_id: pacienteId
-      });
-
-      if (inactivarError) {
-        console.error('Error eliminando sesiones:', inactivarError);
-      } else {
+      try {
+        const resultado = await inactivarPacienteCompleto(pacienteId);
         console.log('✅ Sesiones eliminadas:', resultado);
+      } catch (inactivarError) {
+        console.error('Error eliminando sesiones:', inactivarError);
       }
 
       // Actualizar estado local
