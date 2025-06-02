@@ -89,7 +89,10 @@ const Modal = ({
       case 'edit-sesion':
         setFormData({
           ...data,
-          fecha_hora: new Date(data.fecha_hora).toISOString().slice(0, 16),
+          // ✅ CORRECCIÓN DEFINITIVA: Convertir fecha sin zona horaria
+          fecha_hora: data.fecha_hora.includes(' ')
+            ? data.fecha_hora.split(' ')[0] + 'T' + data.fecha_hora.split(' ')[1].slice(0, 5)
+            : (data.fecha_hora.includes('T') ? data.fecha_hora.slice(0, 16) : data.fecha_hora),
           // ✅ CAMPOS DE ACOMPAÑAMIENTO para edición
           acompañado_supervisora: data.acompañado_supervisora || false,
           supervisora_acompanante_id: data.supervisora_acompanante_id || ''
@@ -304,11 +307,6 @@ const Modal = ({
           cleanFormData.supervisora_acompanante_id = null;
         }
         // Si está marcado Y el tipo lo permite, mantener supervisora_acompanante_id
-      }
-
-      // 🔧 CORRECCIÓN: NO convertir fecha si ya viene en formato correcto
-      if (cleanFormData.fecha_hora && !cleanFormData.fecha_hora.includes('T')) {
-        cleanFormData.fecha_hora = new Date(cleanFormData.fecha_hora).toISOString();
       }
 
       // Asegurar que los números son números

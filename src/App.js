@@ -593,24 +593,27 @@ function App() {
     if (!fechaISO) return '';
 
     try {
-      console.log('📅 Convirtiendo fecha ISO a input (Argentina):', fechaISO);
+      console.log('📅 Convirtiendo fecha ISO a input:', fechaISO);
 
-      const fecha = new Date(fechaISO);
+      // Si viene en formato 'YYYY-MM-DD HH:mm:ss' (desde la BD), convertir directamente
+      if (fechaISO.includes(' ') && !fechaISO.includes('T')) {
+        const [fechaParte, horaParte] = fechaISO.split(' ');
+        const [horas, minutos] = horaParte.split(':');
+        const fechaFormateada = `${fechaParte}T${horas}:${minutos}`;
 
-      // Usar métodos locales para mantener zona horaria
-      const año = fecha.getFullYear();
-      const mes = String(fecha.getMonth() + 1).padStart(2, '0');
-      const dia = String(fecha.getDate()).padStart(2, '0');
-      const horas = String(fecha.getHours()).padStart(2, '0');
-      const minutos = String(fecha.getMinutes()).padStart(2, '0');
+        console.log('📅 Conversión directa desde BD:', fechaFormateada);
+        return fechaFormateada;
+      }
 
-      const fechaFormateada = `${año}-${mes}-${dia}T${horas}:${minutos}`;
+      // Si ya tiene T, puede que ya esté en formato correcto
+      if (fechaISO.includes('T')) {
+        return fechaISO.slice(0, 16);
+      }
 
-      console.log('📅 ISO original:', fechaISO);
-      console.log('📅 Fecha parseada:', fecha.toString());
-      console.log('📅 Para input:', fechaFormateada);
+      // Fallback - no debería llegar aquí
+      console.log('📅 Fallback - formato no reconocido:', fechaISO);
+      return fechaISO;
 
-      return fechaFormateada;
     } catch (error) {
       console.error('❌ Error formateando fecha para input:', error);
       return '';

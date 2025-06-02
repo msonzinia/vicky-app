@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, AlertTriangle, FileText, Calendar, DollarSign, User, Building, CheckCircle, AlertCircle, Mail, FileCheck, CreditCard } from 'lucide-react';
+import { Receipt, AlertTriangle, FileText, Calendar, DollarSign, User, Building, CheckCircle, AlertCircle, Mail, FileCheck, CreditCard, Edit3, Save, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const FacturarView = ({
@@ -23,6 +23,12 @@ const FacturarView = ({
     },
     alertas: []
   });
+
+  // 🚀 NUEVO: Estados para alquiler editable
+  const [alquilerEditable, setAlquilerEditable] = useState(false);
+  const [alquilerMesActual, setAlquilerMesActual] = useState(null);
+  const [guardandoAlquiler, setGuardandoAlquiler] = useState(false);
+  const [precioTemporal, setPrecioTemporal] = useState('');
 
   // Determinar mes por defecto (actual o anterior si estamos en los primeros 9 días)
   useEffect(() => {
@@ -57,13 +63,114 @@ const FacturarView = ({
     if (mesSeleccionado && pacientes?.length > 0) {
       console.log('✅ Condiciones cumplidas, cargando datos...');
       cargarDatosFacturacion();
+
+      // 🚀 NUEVO: Cargar alquiler del mes
+      const año = mesSeleccionado.getFullYear();
+      const mes = mesSeleccionado.getMonth() + 1;
+      cargarAlquilerMes(año, mes);
     } else {
       console.log('❌ Condiciones no cumplidas, esperando...', {
         tieneMes: !!mesSeleccionado,
         tienePacientes: pacientes?.length > 0
       });
     }
-  }, [mesSeleccionado, pacientes, supervisoras]);
+  }, [mesSeleccionado, pacientes, supervisoras, alquilerConfig]);
+
+  // 🚀 NUEVO: Cargar precio de alquiler específico del mes
+  const cargarAlquilerMes = async (año, mes) => {
+    try {
+      console.log('🏠 Cargando precio alquiler para:', { año, mes });
+
+      // Buscar si hay un precio específico para este mes
+      const { data: alquilerHistorico, error } = await supabase
+        .from('alquiler_historico')
+        .select('*')
+        .eq('año', año)
+        .eq('mes', mes)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (alquilerHistorico) {
+        console.log('✅ Precio histórico encontrado:', alquilerHistorico.precio_mensual);
+        setAlquilerMesActual({
+          ...alquilerHistorico,
+          esHistorico: true
+        });
+      } else {
+        console.log('📋 Usando precio general:', alquilerConfig.precio_mensual);
+        setAlquilerMesActual({
+          año,
+          mes,
+          precio_mensual: alquilerConfig.precio_mensual,
+          esHistorico: false
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando alquiler del mes:', error);
+      setAlquilerMesActual({
+        año,
+        mes,
+        precio_mensual: alquilerConfig.precio_mensual || 0,
+        esHistorico: false
+      });
+    }
+  };
+
+  // 🚀 NUEVO: Guardar precio de alquiler para el mes específico
+  const guardarAlquilerMes = async (nuevoPrecio, observaciones = '') => {
+    try {
+      setGuardandoAlquiler(true);
+
+      const año = mesSeleccionado.getFullYear();
+      const mes = mesSeleccionado.getMonth() + 1;
+
+      console.log('💾 Guardando precio alquiler:', { año, mes, precio: nuevoPrecio });
+
+      const { error } = await supabase
+        .from('alquiler_historico')
+        .upsert({
+          año,
+          mes,
+          precio_mensual: parseFloat(nuevoPrecio),
+          observaciones,
+          fecha_modificacion: new Date().toISOString()
+        }, {
+          onConflict: 'año,mes'
+        });
+
+      if (error) throw error;
+
+      // Actualizar estado local
+      setAlquilerMesActual(prev => ({
+        ...prev,
+        precio_mensual: parseFloat(nuevoPrecio),
+        observaciones,
+        esHistorico: true
+      }));
+
+      setAlquilerEditable(false);
+      setPrecioTemporal('');
+
+      if (window.showToast) {
+        window.showToast(
+          `💰 Alquiler actualizado para ${mesSeleccionado.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}`,
+          'success'
+        );
+      }
+
+      // Recargar datos de facturación para reflejar el cambio
+      await cargarDatosFacturacion();
+
+    } catch (error) {
+      console.error('Error guardando alquiler:', error);
+      alert('Error al guardar alquiler: ' + error.message);
+    } finally {
+      setGuardandoAlquiler(false);
+    }
+  };
 
   const cargarDatosFacturacion = async () => {
     try {
@@ -245,12 +352,12 @@ const FacturarView = ({
     return { pendientes: entradasPorPaciente, pagados: entradasPagadas };
   };
 
-  // 🚀 NUEVA FUNCIÓN: Procesar salidas usando la view de supervisoras
+  // 🚀 MODIFICADA: Procesar salidas usando alquiler histórico
   const procesarSalidasConView = async (año, mes) => {
     try {
       console.log('💰 Procesando gastos con view para:', { año, mes });
 
-      // 1. Calcular alquiler (lógica original)
+      // 1. 🚀 NUEVO: Calcular alquiler usando precio histórico
       const fechaInicioAlquiler = new Date('2025-05-01');
       const mesActual = new Date(mesSeleccionado.getFullYear(), mesSeleccionado.getMonth(), 1);
 
@@ -260,7 +367,15 @@ const FacturarView = ({
         mesesAlquiler = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44)) + 1;
       }
 
-      const totalAlquilerAdeudado = mesesAlquiler * (alquilerConfig?.precio_mensual || 0);
+      // 🚀 NUEVO: Usar precio específico del mes si existe
+      const precioAlquilerMes = alquilerMesActual?.precio_mensual || alquilerConfig?.precio_mensual || 0;
+
+      // Calcular total adeudado hasta el mes anterior (con precio general)
+      const mesesAnteriores = mesesAlquiler - 1;
+      const totalAlquilerMesesAnteriores = mesesAnteriores * (alquilerConfig?.precio_mensual || 0);
+
+      // Agregar el mes actual con su precio específico
+      const totalAlquilerAdeudado = totalAlquilerMesesAnteriores + precioAlquilerMes;
 
       const { data: pagosAlquiler } = await supabase
         .from('pagos_hechos')
@@ -270,6 +385,16 @@ const FacturarView = ({
 
       const totalAlquilerPagado = (pagosAlquiler || []).reduce((sum, p) => sum + p.monto_ars, 0);
       const alquilerPendiente = totalAlquilerAdeudado - totalAlquilerPagado;
+
+      console.log('🏠 Cálculo alquiler:', {
+        mesesTotal: mesesAlquiler,
+        mesesAnteriores,
+        precioGeneral: alquilerConfig?.precio_mensual,
+        precioMesActual: precioAlquilerMes,
+        totalAdeudado: totalAlquilerAdeudado,
+        totalPagado: totalAlquilerPagado,
+        pendiente: alquilerPendiente
+      });
 
       // 2. 🚀 NUEVO: Usar la view de supervisoras
       const { data: resumenSupervisoras, error: supervisorasError } = await supabase
@@ -539,6 +664,33 @@ const FacturarView = ({
     }
 
     return opciones.reverse();
+  };
+
+  // 🚀 NUEVO: Manejar cambios en el precio temporal
+  const handlePrecioChange = (e) => {
+    setPrecioTemporal(e.target.value);
+  };
+
+  // 🚀 NUEVO: Guardar precio y cerrar edición
+  const handleGuardarPrecio = () => {
+    if (precioTemporal && precioTemporal !== alquilerMesActual?.precio_mensual?.toString()) {
+      guardarAlquilerMes(precioTemporal, `Modificado en ${new Date().toLocaleDateString('es-AR')}`);
+    } else {
+      setAlquilerEditable(false);
+      setPrecioTemporal('');
+    }
+  };
+
+  // 🚀 NUEVO: Cancelar edición
+  const handleCancelarEdicion = () => {
+    setAlquilerEditable(false);
+    setPrecioTemporal('');
+  };
+
+  // 🚀 NUEVO: Iniciar edición
+  const handleIniciarEdicion = () => {
+    setAlquilerEditable(true);
+    setPrecioTemporal(alquilerMesActual?.precio_mensual?.toString() || '');
   };
 
   if (loading) {
@@ -930,15 +1082,75 @@ const FacturarView = ({
           </div>
 
           <div className="space-y-4">
-            {/* Alquiler */}
+            {/* 🚀 NUEVO: Alquiler EDITABLE */}
             {datosFacturacion.salidas.alquiler > 0 && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Building className="text-orange-600" size={20} />
                     <div>
-                      <h4 className="font-bold text-gray-800">Alquiler del Consultorio</h4>
+                      <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                        Alquiler del Consultorio
+                        {alquilerMesActual?.esHistorico && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            Precio específico
+                          </span>
+                        )}
+                      </h4>
                       <p className="text-sm text-gray-600">{alquilerConfig?.destinatario_default}</p>
+
+                      {/* 🚀 NUEVO: Campo editable */}
+                      {alquilerEditable ? (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={precioTemporal}
+                            onChange={handlePrecioChange}
+                            className="px-2 py-1 border border-orange-300 rounded text-sm w-32"
+                            placeholder="Precio mensual"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleGuardarPrecio();
+                              }
+                              if (e.key === 'Escape') {
+                                handleCancelarEdicion();
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleGuardarPrecio}
+                            className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 flex items-center gap-1"
+                            disabled={guardandoAlquiler}
+                          >
+                            {guardandoAlquiler ? '...' : <><Save size={12} /> Guardar</>}
+                          </button>
+                          <button
+                            onClick={handleCancelarEdicion}
+                            className="px-2 py-1 bg-gray-400 text-white rounded text-xs hover:bg-gray-500 flex items-center gap-1"
+                          >
+                            <X size={12} /> Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-xs text-gray-500 flex items-center gap-2">
+                          <span>Precio mensual: ${alquilerMesActual?.precio_mensual?.toLocaleString() || 'Cargando...'}</span>
+                          <button
+                            onClick={handleIniciarEdicion}
+                            className="text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
+                            title="Editar precio para este mes específico"
+                          >
+                            <Edit3 size={12} /> Editar
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Mostrar observaciones si existen */}
+                      {alquilerMesActual?.observaciones && (
+                        <div className="mt-1 text-xs text-blue-600">
+                          💡 {alquilerMesActual.observaciones}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
