@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Edit3 } from 'lucide-react';
+import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Edit3, Save, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const Sidebar = ({
@@ -12,15 +12,20 @@ const Sidebar = ({
   sesiones = [],
   supervisoras = [],
   alquilerConfig = { precio_mensual: 50000 },
-  lastUpdateTimestamp // 🚀 NUEVO: Para detectar actualizaciones
+  lastUpdateTimestamp
 }) => {
   const [perfilConfig, setPerfilConfig] = useState({
     nombre_completo: 'Victoria Güemes',
     titulo: 'Lic. Psicopedagogía',
-    foto_url: null
+    foto_url: null,
+    apodo: 'Vicky', // 🆕 NUEVO CAMPO
+    alias_pago: 'victoriaguemes' // 🆕 NUEVO CAMPO
   });
-  const [editandoNombre, setEditandoNombre] = useState(false);
-  const [nuevoNombre, setNuevoNombre] = useState('');
+
+  // 🚀 MODIFICADO: Estados para edición completa del perfil
+  const [editandoPerfil, setEditandoPerfil] = useState(false);
+  const [perfilTemporal, setPerfilTemporal] = useState({});
+
   const [datosProyeccion, setDatosProyeccion] = useState({
     gananciaNeta: 0,
     ingresos: 0,
@@ -41,23 +46,22 @@ const Sidebar = ({
     supervisiones: []
   });
 
-  // Cargar configuración de perfil
+  // Cargar configuración de perfil COMPLETA
   useEffect(() => {
     cargarPerfilConfig();
   }, []);
 
-  // 🚀 NUEVO: Cargar datos de proyección usando las views
+  // Cargar datos de proyección usando las views
   useEffect(() => {
-    if (sesiones && supervisoras) { // Solo ejecutar si tenemos datos
-      // Agregar un pequeño delay para permitir que la BD se actualice
+    if (sesiones && supervisoras) {
       const timer = setTimeout(() => {
         calcularProyeccionConViews();
-      }, 500); // 500ms delay para asegurar que la BD esté actualizada
-
+      }, 500);
       return () => clearTimeout(timer);
     }
-  }, [sesiones?.length, supervisoras?.length, alquilerConfig?.precio_mensual, lastUpdateTimestamp]); // ✅ DETECTAR CAMBIOS CON TIMESTAMP
+  }, [sesiones?.length, supervisoras?.length, alquilerConfig?.precio_mensual, lastUpdateTimestamp]);
 
+  // 🚀 MODIFICADA: Cargar configuración completa del perfil
   const cargarPerfilConfig = async () => {
     try {
       const { data, error } = await supabase
@@ -71,7 +75,14 @@ const Sidebar = ({
       }
 
       if (data) {
-        setPerfilConfig(data);
+        setPerfilConfig({
+          ...data,
+          // Valores por defecto si no existen
+          nombre_completo: data.nombre_completo || 'Victoria Güemes',
+          titulo: data.titulo || 'Lic. Psicopedagogía',
+          apodo: data.apodo || 'Vicky',
+          alias_pago: data.alias_pago || 'victoriaguemes'
+        });
       }
     } catch (error) {
       console.error('Error cargando perfil:', error);
@@ -87,7 +98,7 @@ const Sidebar = ({
 
       console.log('📊 Calculando proyección sidebar para:', { year, month });
 
-      // 1. Obtener ingresos usando la view de pacientes (datos frescos)
+      // 1. Obtener ingresos usando la view de pacientes
       const { data: ingresosView, error: ingresosError } = await supabase
         .from('resumen_facturacion_mensual')
         .select('*')
@@ -105,7 +116,7 @@ const Sidebar = ({
 
       if (gastosError) throw gastosError;
 
-      // 3. Calcular alquiler (lógica original)
+      // 3. Calcular alquiler
       const fechaInicioAlquiler = new Date('2025-05-01');
       const mesActual = new Date(year, month - 1, 1);
 
@@ -142,17 +153,13 @@ const Sidebar = ({
       };
 
       (ingresosView || []).forEach(resumen => {
-        // Solo contar si el total final es positivo (hay algo que cobrar)
         if (resumen.total_final > 0) {
           totalIngresos += resumen.total_final;
-
-          // Sumar cantidades y montos por tipo
           detalleIngresos.sesiones += resumen.cantidad_sesiones || 0;
           detalleIngresos.evaluaciones += resumen.cantidad_evaluaciones || 0;
           detalleIngresos.reevaluaciones += resumen.cantidad_reevaluaciones || 0;
           detalleIngresos.devoluciones += resumen.cantidad_devoluciones || 0;
           detalleIngresos.reuniones_colegio += resumen.cantidad_reuniones_colegio || 0;
-
           detalleIngresos.ingresosSesiones += resumen.monto_sesiones || 0;
           detalleIngresos.ingresosEvaluaciones += resumen.monto_evaluaciones || 0;
           detalleIngresos.ingresosReevaluaciones += resumen.monto_reevaluaciones || 0;
@@ -161,7 +168,7 @@ const Sidebar = ({
         }
       });
 
-      // 5. Procesar datos de gastos de supervisoras (discriminado por tipo)
+      // 5. Procesar datos de gastos de supervisoras
       let totalGastoSupervision = 0;
       const supervisionesDetalle = {
         supervisiones: { cantidad: 0, monto: 0 },
@@ -175,23 +182,16 @@ const Sidebar = ({
       (gastosView || []).forEach(gasto => {
         if (gasto.total_final > 0) {
           totalGastoSupervision += gasto.total_final;
-
-          // Acumular por tipo (sumando todas las supervisoras)
           supervisionesDetalle.supervisiones.cantidad += gasto.cantidad_supervisiones || 0;
           supervisionesDetalle.supervisiones.monto += gasto.monto_supervisiones || 0;
-
           supervisionesDetalle.acomp_evaluaciones.cantidad += gasto.cantidad_acomp_evaluaciones || 0;
           supervisionesDetalle.acomp_evaluaciones.monto += gasto.monto_acomp_evaluaciones || 0;
-
           supervisionesDetalle.acomp_reevaluaciones.cantidad += gasto.cantidad_acomp_reevaluaciones || 0;
           supervisionesDetalle.acomp_reevaluaciones.monto += gasto.monto_acomp_reevaluaciones || 0;
-
           supervisionesDetalle.acomp_devoluciones.cantidad += gasto.cantidad_acomp_devoluciones || 0;
           supervisionesDetalle.acomp_devoluciones.monto += gasto.monto_acomp_devoluciones || 0;
-
           supervisionesDetalle.acomp_reuniones.cantidad += gasto.cantidad_acomp_reuniones || 0;
           supervisionesDetalle.acomp_reuniones.monto += gasto.monto_acomp_reuniones || 0;
-
           supervisionesDetalle.acomp_sesiones.cantidad += gasto.cantidad_acomp_sesiones || 0;
           supervisionesDetalle.acomp_sesiones.monto += gasto.monto_acomp_sesiones || 0;
         }
@@ -219,13 +219,12 @@ const Sidebar = ({
 
     } catch (error) {
       console.error('Error calculando proyección:', error);
-      // En caso de error, usar cálculo fallback (lógica original)
       const fallback = calculateCurrentMonthProfitFallback();
       setDatosProyeccion(fallback);
     }
   };
 
-  // 🔄 Función fallback (lógica original) en caso de que las views fallen
+  // Función fallback en caso de error
   const calculateCurrentMonthProfitFallback = () => {
     const now = new Date();
     const currentMonth = now.getMonth();
@@ -323,26 +322,57 @@ const Sidebar = ({
     }
   };
 
-  const actualizarNombre = async () => {
+  // 🚀 MODIFICADA: Actualizar perfil completo
+  const actualizarPerfil = async () => {
     try {
       const { error } = await supabase
         .from('configuracion_perfil')
-        .update({ nombre_completo: nuevoNombre })
+        .update({
+          nombre_completo: perfilTemporal.nombre_completo,
+          titulo: perfilTemporal.titulo,
+          apodo: perfilTemporal.apodo,
+          alias_pago: perfilTemporal.alias_pago
+        })
         .eq('id', perfilConfig.id);
 
       if (error) throw error;
 
-      setPerfilConfig(prev => ({ ...prev, nombre_completo: nuevoNombre }));
-      setEditandoNombre(false);
+      setPerfilConfig(prev => ({
+        ...prev,
+        nombre_completo: perfilTemporal.nombre_completo,
+        titulo: perfilTemporal.titulo,
+        apodo: perfilTemporal.apodo,
+        alias_pago: perfilTemporal.alias_pago
+      }));
+
+      setEditandoPerfil(false);
+      setPerfilTemporal({});
 
       if (window.showToast) {
-        window.showToast('Nombre actualizado', 'success');
+        window.showToast('Perfil actualizado correctamente', 'success');
       }
 
     } catch (error) {
-      console.error('Error actualizando nombre:', error);
-      alert('Error al actualizar nombre: ' + error.message);
+      console.error('Error actualizando perfil:', error);
+      alert('Error al actualizar perfil: ' + error.message);
     }
+  };
+
+  // 🚀 NUEVA: Iniciar edición de perfil
+  const iniciarEdicionPerfil = () => {
+    setEditandoPerfil(true);
+    setPerfilTemporal({
+      nombre_completo: perfilConfig.nombre_completo,
+      titulo: perfilConfig.titulo,
+      apodo: perfilConfig.apodo,
+      alias_pago: perfilConfig.alias_pago
+    });
+  };
+
+  // 🚀 NUEVA: Cancelar edición
+  const cancelarEdicionPerfil = () => {
+    setEditandoPerfil(false);
+    setPerfilTemporal({});
   };
 
   const handleImageUpload = (event) => {
@@ -359,7 +389,6 @@ const Sidebar = ({
     return `${amount.toLocaleString()} ARS`;
   };
 
-  // 🚀 USAR LOS NUEVOS DATOS CALCULADOS
   const { gananciaNeta, gastoAlquiler, detalle, supervisionesDetalle } = datosProyeccion;
   const nombreMes = new Date().toLocaleDateString('es-AR', { month: 'long' });
 
@@ -375,7 +404,7 @@ const Sidebar = ({
 
   return (
     <div className="w-72 sidebar-fixed text-white flex-shrink-0 flex flex-col h-screen">
-      {/* Header con Perfil - COMPACTO */}
+      {/* Header con Perfil - EXPANDIDO PARA EDICIÓN */}
       <div className="p-4 flex-shrink-0">
         <div className="flex items-center gap-3">
           {/* Foto de Perfil */}
@@ -403,21 +432,56 @@ const Sidebar = ({
 
           {/* Información Personal */}
           <div className="flex-1">
-            {editandoNombre ? (
-              <div className="space-y-1">
+            {editandoPerfil ? (
+              // 🚀 NUEVO: Formulario de edición completo
+              <div className="space-y-2">
                 <input
                   type="text"
-                  value={nuevoNombre}
-                  onChange={(e) => setNuevoNombre(e.target.value)}
-                  className="w-full bg-white/10 text-white text-sm font-medium px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50"
+                  value={perfilTemporal.nombre_completo || ''}
+                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, nombre_completo: e.target.value }))}
+                  className="w-full bg-white/10 text-gray-900 text-xs font-medium px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
                   placeholder="Nombre completo"
                 />
+                <input
+                  type="text"
+                  value={perfilTemporal.titulo || ''}
+                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, titulo: e.target.value }))}
+                  className="w-full bg-white/10 text-gray-900 text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
+                  placeholder="Título profesional"
+                />
+                <input
+                  type="text"
+                  value={perfilTemporal.apodo || ''}
+                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, apodo: e.target.value }))}
+                  className="w-full bg-white/10 text-gray-900 text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
+                  placeholder="Tu apodo (para mensajes)"
+                />
+                <input
+                  type="text"
+                  value={perfilTemporal.alias_pago || ''}
+                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, alias_pago: e.target.value }))}
+                  className="w-full bg-white/10 text-gray-900 text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
+                  placeholder="Alias de pago"
+                />
                 <div className="flex gap-1">
-                  <button onClick={actualizarNombre} className="text-green-300 hover:text-green-200 text-xs">✓</button>
-                  <button onClick={() => { setEditandoNombre(false); setNuevoNombre(''); }} className="text-red-300 hover:text-red-200 text-xs">✕</button>
+                  <button
+                    onClick={actualizarPerfil}
+                    className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                  >
+                    <Save size={10} />
+                    Guardar
+                  </button>
+                  <button
+                    onClick={cancelarEdicionPerfil}
+                    className="flex items-center gap-1 px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                  >
+                    <X size={10} />
+                    Cancelar
+                  </button>
                 </div>
               </div>
             ) : (
+              // Vista normal SIN mostrar apodo y alias
               <div className="flex items-center gap-1">
                 <div>
                   <h1 className="text-sm font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
@@ -426,8 +490,9 @@ const Sidebar = ({
                   <p className="text-purple-200 text-xs">{perfilConfig.titulo}</p>
                 </div>
                 <button
-                  onClick={() => { setEditandoNombre(true); setNuevoNombre(perfilConfig.nombre_completo); }}
+                  onClick={iniciarEdicionPerfil}
                   className="text-purple-200 hover:text-white opacity-70 hover:opacity-100"
+                  title="Editar perfil completo"
                 >
                   <Edit3 size={12} />
                 </button>
@@ -437,7 +502,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      {/* Notificación de sesiones pendientes - MUY COMPACTO */}
+      {/* Notificación de sesiones pendientes */}
       {sesionsPendientes > 0 && (
         <div className="mx-4 mb-2 p-2 bg-gradient-to-r from-orange-500 to-yellow-500 rounded-lg shadow-lg flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -449,7 +514,7 @@ const Sidebar = ({
         </div>
       )}
 
-      {/* Navegación - COMPACTO */}
+      {/* Navegación */}
       <div className="px-4 flex-shrink-0">
         <nav className="space-y-1 mb-4">
           {menuItems.map(({ id, label, icon: Icon }) => (
@@ -473,7 +538,7 @@ const Sidebar = ({
         </nav>
       </div>
 
-      {/* 🚀 Ganancia neta del mes - ACTUALIZADA CON VIEWS */}
+      {/* Ganancia neta del mes */}
       <div className="px-4 mb-6">
         <div className="p-3 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 flex-1 flex flex-col">
           <h4 className="text-xs text-purple-100 font-medium mb-2">
@@ -484,9 +549,9 @@ const Sidebar = ({
             {formatCurrency(gananciaNeta)}
           </div>
 
-          {/* Detalles SUPER COMPACTOS - ACTUALIZADOS */}
+          {/* Detalles compactos */}
           <div className="text-xs text-purple-200 space-y-1 flex-1">
-            {/* 📈 INGRESOS */}
+            {/* INGRESOS */}
             {detalle.sesiones > 0 && (
               <div className="flex justify-between">
                 <span>🧠 Sesiones ({detalle.sesiones})</span>
@@ -523,8 +588,7 @@ const Sidebar = ({
               <div className="border-t border-purple-300/30 my-1"></div>
             )}
 
-            {/* 📉 GASTOS - Discriminado por tipo */}
-            {/* Supervisiones */}
+            {/* GASTOS */}
             {supervisionesDetalle?.supervisiones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>👥 Supervisiones ({supervisionesDetalle.supervisiones.cantidad})</span>
@@ -532,7 +596,6 @@ const Sidebar = ({
               </div>
             )}
 
-            {/* Acompañamientos por tipo */}
             {supervisionesDetalle?.acomp_evaluaciones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>📋 Acomp. Evaluaciones ({supervisionesDetalle.acomp_evaluaciones.cantidad})</span>
@@ -585,7 +648,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      {/* Toggle de moneda - MINI en el footer */}
+      {/* Toggle de moneda */}
       <div className="px-4 pb-4 flex-shrink-0">
         <div className="flex bg-white/20 rounded-md p-0.5">
           <button

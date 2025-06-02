@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, AlertTriangle, FileText, Calendar, DollarSign, User, Building, CheckCircle, AlertCircle, Mail, FileCheck, CreditCard, Edit3, Save, X } from 'lucide-react';
+import { Receipt, AlertTriangle, FileText, Calendar, DollarSign, User, Building, CheckCircle, AlertCircle, Mail, FileCheck, CreditCard, Edit3, Save, X, Copy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const FacturarView = ({
@@ -24,11 +24,22 @@ const FacturarView = ({
     alertas: []
   });
 
+  // 🚀 NUEVO: Estado para configuración de perfil (solo para mensajes)
+  const [perfilConfig, setPerfilConfig] = useState({
+    apodo: 'Vicky',
+    alias_pago: 'victoriaguemes'
+  });
+
   // 🚀 NUEVO: Estados para alquiler editable
   const [alquilerEditable, setAlquilerEditable] = useState(false);
   const [alquilerMesActual, setAlquilerMesActual] = useState(null);
   const [guardandoAlquiler, setGuardandoAlquiler] = useState(false);
   const [precioTemporal, setPrecioTemporal] = useState('');
+
+  // 🚀 NUEVO: Cargar configuración de perfil al inicio
+  useEffect(() => {
+    cargarPerfilConfig();
+  }, []);
 
   // Determinar mes por defecto (actual o anterior si estamos en los primeros 9 días)
   useEffect(() => {
@@ -75,6 +86,156 @@ const FacturarView = ({
       });
     }
   }, [mesSeleccionado, pacientes, supervisoras, alquilerConfig]);
+
+  // 🚀 NUEVA: Cargar configuración de perfil
+  const cargarPerfilConfig = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('configuracion_perfil')
+        .select('apodo, alias_pago')
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
+        setPerfilConfig({
+          apodo: data.apodo || 'Vicky',
+          alias_pago: data.alias_pago || 'victoriaguemes'
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando perfil:', error);
+    }
+  };
+
+  // 🚀 NUEVA: Función para generar mensaje al tutor
+  const generarMensajeTutor = async (entrada) => {
+    try {
+      const year = mesSeleccionado.getFullYear();
+      const month = mesSeleccionado.getMonth() + 1;
+
+      // Obtener sesiones detalladas del paciente en el mes
+      const inicioMes = new Date(year, month - 1, 1);
+      const finMes = new Date(year, month, 0, 23, 59, 59);
+
+      const { data: sesionesDetalle, error } = await supabase
+        .from('sesiones')
+        .select('*')
+        .eq('paciente_id', entrada.paciente.id)
+        .eq('eliminado', false)
+        .gte('fecha_hora', inicioMes.toISOString())
+        .lte('fecha_hora', finMes.toISOString())
+        .order('fecha_hora');
+
+      if (error) throw error;
+
+      // Filtrar solo sesiones que generan cobro
+      const sesionesCobro = (sesionesDetalle || []).filter(sesion =>
+        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado)
+      );
+
+      // Obtener nombre del tutor (solo primer nombre)
+      const nombreTutor = entrada.paciente.nombre_apellido_tutor?.split(' ')[0] || 'Hola';
+
+      // Nombre del mes en español
+      const nombreMes = mesSeleccionado.toLocaleDateString('es-AR', {
+        month: 'long',
+        year: 'numeric'
+      });
+
+      // Construir el mensaje
+      let mensaje = `Hola ${nombreTutor}, cómo estás?\n`;
+      mensaje += `Te mando el resumen del mes:\n\n`;
+      mensaje += `Honorarios ${perfilConfig.apodo} ${nombreMes}:\n`;
+
+      // Agregar detalle de cada sesión
+      let totalHoras = 0;
+      let precioPromedio = 0;
+      let totalSesiones = 0;
+
+      sesionesCobro.forEach(sesion => {
+        const fecha = new Date(sesion.fecha_hora);
+        const fechaFormateada = fecha.toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit'
+        });
+
+        let tipoSesion = 'Sesión';
+        switch (sesion.tipo_sesion) {
+          case 'Evaluación':
+            tipoSesion = 'Evaluación';
+            break;
+          case 'Re-evaluación':
+            tipoSesion = 'Re-evaluación';
+            break;
+          case 'Devolución':
+            tipoSesion = 'Devolución';
+            break;
+          case 'Reunión colegio':
+            tipoSesion = 'Reunión colegio';
+            break;
+          default:
+            tipoSesion = 'Sesión';
+        }
+
+        const horas = sesion.duracion_horas || 1;
+        totalHoras += horas;
+        precioPromedio += sesion.precio_por_hora;
+        totalSesiones++;
+
+        let lineaSesion = `${fechaFormateada} - ${tipoSesion} (${horas}h)`;
+
+        // Agregar nota si fue cancelada sin aviso
+        if (sesion.estado === 'Cancelada sin aviso') {
+          lineaSesion += ' Cancelada sin aviso';
+        }
+
+        mensaje += `${lineaSesion}\n`;
+      });
+
+      // Calcular precio promedio
+      const precioHora = totalSesiones > 0 ? Math.round(precioPromedio / totalSesiones) : 0;
+      const montoTotal = entrada.totalFinal;
+
+      mensaje += `\nTotal ${totalHoras} horas\n`;
+      mensaje += `Valor hora: $${precioHora.toLocaleString()}\n`;
+      mensaje += `TOTAL: $${Math.abs(montoTotal).toLocaleString()}\n\n`;
+
+      // Datos de pago
+      mensaje += `Datos de pago:\n`;
+      mensaje += `Alias: ${perfilConfig.alias_pago}\n\n`;
+      mensaje += `Muchas gracias!`;
+
+      return mensaje;
+
+    } catch (error) {
+      console.error('Error generando mensaje:', error);
+      throw error;
+    }
+  };
+
+  // 🚀 NUEVA: Función para copiar mensaje al portapapeles
+  const copiarMensajeTutor = async (entrada) => {
+    try {
+      const mensaje = await generarMensajeTutor(entrada);
+
+      // Copiar al portapapeles
+      await navigator.clipboard.writeText(mensaje);
+
+      if (window.showToast) {
+        window.showToast(`📋 Mensaje copiado para ${entrada.paciente.nombre_apellido}`, 'success');
+      } else {
+        alert('Mensaje copiado al portapapeles');
+      }
+
+    } catch (error) {
+      console.error('Error copiando mensaje:', error);
+      alert('Error al generar el mensaje: ' + error.message);
+    }
+  };
 
   // 🚀 NUEVO: Cargar precio de alquiler específico del mes
   const cargarAlquilerMes = async (año, mes) => {
@@ -820,13 +981,24 @@ const FacturarView = ({
                       <div><span className="font-medium">CUIL:</span> {entrada.paciente.cuil}</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-green-600 flex items-center gap-2">
-                      {formatCurrency(entrada.totalFinal)}
-                      {entrada.seguimiento?.completamente_pagado && <CheckCircle size={16} className="text-green-500" />}
-                      {!entrada.seguimiento?.enviado_tutor && <AlertTriangle size={16} className="text-yellow-500" />}
+                  <div className="text-right flex items-center gap-3">
+                    <div>
+                      <div className="text-xl font-bold text-green-600 flex items-center gap-2">
+                        {formatCurrency(entrada.totalFinal)}
+                        {entrada.seguimiento?.completamente_pagado && <CheckCircle size={16} className="text-green-500" />}
+                        {!entrada.seguimiento?.enviado_tutor && <AlertTriangle size={16} className="text-yellow-500" />}
+                      </div>
+                      <div className="text-xs text-gray-500">A cobrar</div>
                     </div>
-                    <div className="text-xs text-gray-500">A cobrar</div>
+                    {/* 🚀 NUEVO: Botón para copiar mensaje */}
+                    <button
+                      onClick={() => copiarMensajeTutor(entrada)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+                      title="Copiar mensaje para el tutor"
+                    >
+                      <Copy size={16} />
+                      Copiar
+                    </button>
                   </div>
                 </div>
 
