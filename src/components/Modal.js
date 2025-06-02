@@ -128,7 +128,7 @@ const Modal = ({
           [field]: value,
           paciente_id: '',
           supervisora_id: '',
-          duracion_horas: value === 'Evaluación' || value === 'Re-evaluación' ? 2 : 1,
+          duracion_horas: ['Evaluación', 'Re-evaluación', 'Supervisión'].includes(value) ? 2 : 1,
           // ✅ Resetear campos de acompañamiento solo si el nuevo tipo no lo permite
           acompañado_supervisora: tiposConAcompanamiento.includes(value) ? prev.acompañado_supervisora || false : false,
           supervisora_acompanante_id: tiposConAcompanamiento.includes(value) ? prev.supervisora_acompanante_id || '' : ''

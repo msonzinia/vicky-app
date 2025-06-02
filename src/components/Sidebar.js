@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Edit3, Save, X } from 'lucide-react';
+import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Edit3, Save, X, UserCog, User, GraduationCap, Heart, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const Sidebar = ({
@@ -18,11 +18,10 @@ const Sidebar = ({
     nombre_completo: 'Victoria Güemes',
     titulo: 'Lic. Psicopedagogía',
     foto_url: null,
-    apodo: 'Vicky', // 🆕 NUEVO CAMPO
-    alias_pago: 'victoriaguemes' // 🆕 NUEVO CAMPO
+    apodo: 'Vicky',
+    alias_pago: 'victoriaguemes'
   });
 
-  // 🚀 MODIFICADO: Estados para edición completa del perfil
   const [editandoPerfil, setEditandoPerfil] = useState(false);
   const [perfilTemporal, setPerfilTemporal] = useState({});
 
@@ -43,25 +42,36 @@ const Sidebar = ({
       ingresosDevoluciones: 0,
       ingresosReuniones: 0
     },
-    supervisiones: []
+    supervisionesDetalle: {
+      supervisiones: { cantidad: 0, monto: 0 },
+      acomp_evaluaciones: { cantidad: 0, monto: 0 },
+      acomp_reevaluaciones: { cantidad: 0, monto: 0 },
+      acomp_devoluciones: { cantidad: 0, monto: 0 },
+      acomp_reuniones: { cantidad: 0, monto: 0 },
+      acomp_sesiones: { cantidad: 0, monto: 0 }
+    },
+    estimaciones: {
+      supervisionesEstimadas: 0,
+      horasEstimadas: 0,
+      montoEstimado: 0
+    }
   });
 
-  // Cargar configuración de perfil COMPLETA
+  // Cargar configuración de perfil
   useEffect(() => {
     cargarPerfilConfig();
   }, []);
 
-  // Cargar datos de proyección usando las views
+  // Cargar datos de proyección usando SOLO el mes actual
   useEffect(() => {
     if (sesiones && supervisoras) {
       const timer = setTimeout(() => {
-        calcularProyeccionConViews();
+        calcularEstimadoMesActual();
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [sesiones?.length, supervisoras?.length, alquilerConfig?.precio_mensual, lastUpdateTimestamp]);
 
-  // 🚀 MODIFICADA: Cargar configuración completa del perfil
   const cargarPerfilConfig = async () => {
     try {
       const { data, error } = await supabase
@@ -77,7 +87,6 @@ const Sidebar = ({
       if (data) {
         setPerfilConfig({
           ...data,
-          // Valores por defecto si no existen
           nombre_completo: data.nombre_completo || 'Victoria Güemes',
           titulo: data.titulo || 'Lic. Psicopedagogía',
           apodo: data.apodo || 'Vicky',
@@ -89,202 +98,201 @@ const Sidebar = ({
     }
   };
 
-  // 🚀 NUEVA FUNCIÓN: Calcular proyección usando las views de Supabase
-  const calcularProyeccionConViews = async () => {
+  // 🚀 FUNCIÓN: Calcular estimado SOLO del mes actual
+  const calcularEstimadoMesActual = () => {
     try {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
+      const hoy = new Date();
+      const mesActual = hoy.getMonth();
+      const añoActual = hoy.getFullYear();
 
-      console.log('📊 Calculando proyección sidebar para:', { year, month });
+      console.log('📊 Calculando estimado SOLO del mes actual:', {
+        mes: mesActual + 1,
+        año: añoActual
+      });
 
-      // 1. Obtener ingresos usando la view de pacientes
-      const { data: ingresosView, error: ingresosError } = await supabase
-        .from('resumen_facturacion_mensual')
-        .select('*')
-        .eq('año', year)
-        .eq('mes', month);
+      // 1. Filtrar sesiones SOLO del mes actual
+      const sesionesDelMes = sesiones.filter(sesion => {
+        const fechaSesion = new Date(sesion.fecha_hora);
+        return fechaSesion.getMonth() === mesActual &&
+          fechaSesion.getFullYear() === añoActual;
+      });
 
-      if (ingresosError) throw ingresosError;
+      console.log('🗓️ Sesiones del mes actual:', sesionesDelMes.length);
 
-      // 2. Obtener gastos de supervisoras usando la view
-      const { data: gastosView, error: gastosError } = await supabase
-        .from('resumen_gastos_supervisoras_mensual')
-        .select('*')
-        .eq('año', year)
-        .eq('mes', month);
+      // 2. Solo estados que generan ingresos/gastos
+      const estadosValidos = ['Realizada', 'Cancelada sin antelación', 'Pendiente'];
+      const sesionesFactivirables = sesionesDelMes.filter(sesion =>
+        estadosValidos.includes(sesion.estado)
+      );
 
-      if (gastosError) throw gastosError;
+      console.log('💰 Sesiones que generan ingresos/gastos:', sesionesFactivirables.length);
 
-      // 3. Calcular alquiler
-      const fechaInicioAlquiler = new Date('2025-05-01');
-      const mesActual = new Date(year, month - 1, 1);
+      // 3. INGRESOS: Separar por tipo
+      const sesionesIngresos = sesionesFactivirables.filter(sesion => sesion.paciente_id);
 
-      let mesesAlquiler = 0;
-      if (mesActual >= fechaInicioAlquiler) {
-        const diffTime = mesActual.getTime() - fechaInicioAlquiler.getTime();
-        mesesAlquiler = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44)) + 1;
+      const sesionesNormales = sesionesIngresos.filter(s => s.tipo_sesion === 'Sesión');
+      const evaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Evaluación');
+      const reevaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Re-evaluación');
+      const devoluciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Devolución');
+      const reuniones = sesionesIngresos.filter(s => s.tipo_sesion === 'Reunión con colegio');
+
+      const ingresosSesiones = sesionesNormales.reduce((total, sesion) =>
+        total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+      const ingresosEvaluaciones = evaluaciones.reduce((total, sesion) =>
+        total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+      const ingresosReevaluaciones = reevaluaciones.reduce((total, sesion) =>
+        total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+      const ingresosDevoluciones = devoluciones.reduce((total, sesion) =>
+        total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+      const ingresosReuniones = reuniones.reduce((total, sesion) =>
+        total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+
+      const totalIngresos = ingresosSesiones + ingresosEvaluaciones + ingresosReevaluaciones +
+        ingresosDevoluciones + ingresosReuniones;
+
+      // 4. GASTOS: Supervisiones directas
+      const sesionesSupervisiones = sesionesFactivirables.filter(sesion => sesion.supervisora_id);
+      const gastoSupervisionesDirectas = sesionesSupervisiones.reduce((total, sesion) => {
+        return total + (sesion.precio_por_hora * sesion.duracion_horas);
+      }, 0);
+
+      // 5. GASTOS: Acompañamientos (50% del precio de la sesión)
+      const sesionesConAcompanamiento = sesionesFactivirables.filter(sesion =>
+        sesion.acompañado_supervisora && sesion.supervisora_acompanante_id
+      );
+      const gastoAcompanamientos = sesionesConAcompanamiento.reduce((total, sesion) => {
+        return total + ((sesion.precio_por_hora * sesion.duracion_horas) * 0.5);
+      }, 0);
+
+      // 6. ESTIMACIÓN: Supervisiones regulares (2 por mes, 2 horas cada una = 4 horas)
+      let gastoSupervisionesEstimado = 0;
+      let supervisionesEstimadas = 0;
+      let horasEstimadas = 0;
+
+      const supervisionesRealesDelMes = sesionesSupervisiones.length;
+
+      if (supervisionesRealesDelMes < 2 && supervisoras.length > 0) {
+        const supervisorasActivas = supervisoras.filter(s => !s.eliminado);
+        if (supervisorasActivas.length > 0) {
+          const precioPromedio = supervisorasActivas.reduce((sum, s) =>
+            sum + s.precio_por_hora, 0) / supervisorasActivas.length;
+
+          supervisionesEstimadas = 2 - supervisionesRealesDelMes;
+          horasEstimadas = supervisionesEstimadas * 2; // 2 horas por supervisión
+          gastoSupervisionesEstimado = precioPromedio * horasEstimadas;
+        }
       }
 
-      const totalAlquilerAdeudado = mesesAlquiler * (alquilerConfig?.precio_mensual || 0);
+      // 7. GASTO: Alquiler (calculado simple para el mes)
+      const gastoAlquiler = alquilerConfig?.precio_mensual || 0;
 
-      const { data: pagosAlquiler } = await supabase
-        .from('pagos_hechos')
-        .select('monto_ars')
-        .eq('concepto', 'Alquiler')
-        .eq('eliminado', false);
-
-      const totalAlquilerPagado = (pagosAlquiler || []).reduce((sum, p) => sum + p.monto_ars, 0);
-      const gastoAlquiler = Math.max(0, totalAlquilerAdeudado - totalAlquilerPagado);
-
-      // 4. Procesar datos de ingresos
-      let totalIngresos = 0;
-      const detalleIngresos = {
-        sesiones: 0,
-        evaluaciones: 0,
-        reevaluaciones: 0,
-        devoluciones: 0,
-        reuniones_colegio: 0,
-        ingresosSesiones: 0,
-        ingresosEvaluaciones: 0,
-        ingresosReevaluaciones: 0,
-        ingresosDevoluciones: 0,
-        ingresosReuniones: 0
-      };
-
-      (ingresosView || []).forEach(resumen => {
-        if (resumen.total_final > 0) {
-          totalIngresos += resumen.total_final;
-          detalleIngresos.sesiones += resumen.cantidad_sesiones || 0;
-          detalleIngresos.evaluaciones += resumen.cantidad_evaluaciones || 0;
-          detalleIngresos.reevaluaciones += resumen.cantidad_reevaluaciones || 0;
-          detalleIngresos.devoluciones += resumen.cantidad_devoluciones || 0;
-          detalleIngresos.reuniones_colegio += resumen.cantidad_reuniones_colegio || 0;
-          detalleIngresos.ingresosSesiones += resumen.monto_sesiones || 0;
-          detalleIngresos.ingresosEvaluaciones += resumen.monto_evaluaciones || 0;
-          detalleIngresos.ingresosReevaluaciones += resumen.monto_reevaluaciones || 0;
-          detalleIngresos.ingresosDevoluciones += resumen.monto_devoluciones || 0;
-          detalleIngresos.ingresosReuniones += resumen.monto_reuniones_colegio || 0;
-        }
-      });
-
-      // 5. Procesar datos de gastos de supervisoras
-      let totalGastoSupervision = 0;
-      const supervisionesDetalle = {
-        supervisiones: { cantidad: 0, monto: 0 },
-        acomp_evaluaciones: { cantidad: 0, monto: 0 },
-        acomp_reevaluaciones: { cantidad: 0, monto: 0 },
-        acomp_devoluciones: { cantidad: 0, monto: 0 },
-        acomp_reuniones: { cantidad: 0, monto: 0 },
-        acomp_sesiones: { cantidad: 0, monto: 0 }
-      };
-
-      (gastosView || []).forEach(gasto => {
-        if (gasto.total_final > 0) {
-          totalGastoSupervision += gasto.total_final;
-          supervisionesDetalle.supervisiones.cantidad += gasto.cantidad_supervisiones || 0;
-          supervisionesDetalle.supervisiones.monto += gasto.monto_supervisiones || 0;
-          supervisionesDetalle.acomp_evaluaciones.cantidad += gasto.cantidad_acomp_evaluaciones || 0;
-          supervisionesDetalle.acomp_evaluaciones.monto += gasto.monto_acomp_evaluaciones || 0;
-          supervisionesDetalle.acomp_reevaluaciones.cantidad += gasto.cantidad_acomp_reevaluaciones || 0;
-          supervisionesDetalle.acomp_reevaluaciones.monto += gasto.monto_acomp_reevaluaciones || 0;
-          supervisionesDetalle.acomp_devoluciones.cantidad += gasto.cantidad_acomp_devoluciones || 0;
-          supervisionesDetalle.acomp_devoluciones.monto += gasto.monto_acomp_devoluciones || 0;
-          supervisionesDetalle.acomp_reuniones.cantidad += gasto.cantidad_acomp_reuniones || 0;
-          supervisionesDetalle.acomp_reuniones.monto += gasto.monto_acomp_reuniones || 0;
-          supervisionesDetalle.acomp_sesiones.cantidad += gasto.cantidad_acomp_sesiones || 0;
-          supervisionesDetalle.acomp_sesiones.monto += gasto.monto_acomp_sesiones || 0;
-        }
-      });
-
-      // 6. Calcular ganancia neta
+      // 8. TOTALES
+      const totalGastoSupervision = gastoSupervisionesDirectas + gastoAcompanamientos + gastoSupervisionesEstimado;
       const gananciaNeta = totalIngresos - totalGastoSupervision - gastoAlquiler;
 
-      // 7. Actualizar estado
+      // 9. Detalles de acompañamientos separados por tipo
+      const acompEvaluaciones = sesionesConAcompanamiento.filter(s => s.tipo_sesion === 'Evaluación');
+      const acompReevaluaciones = sesionesConAcompanamiento.filter(s => s.tipo_sesion === 'Re-evaluación');
+      const acompDevoluciones = sesionesConAcompanamiento.filter(s => s.tipo_sesion === 'Devolución');
+      const acompReuniones = sesionesConAcompanamiento.filter(s => s.tipo_sesion === 'Reunión con colegio');
+      const acompSesiones = sesionesConAcompanamiento.filter(s => s.tipo_sesion === 'Sesión');
+
+      // 10. Actualizar estado
       setDatosProyeccion({
         gananciaNeta,
         ingresos: totalIngresos,
         gastoSupervision: totalGastoSupervision,
         gastoAlquiler,
-        detalle: detalleIngresos,
-        supervisionesDetalle
+        detalle: {
+          sesiones: sesionesNormales.length,
+          evaluaciones: evaluaciones.length,
+          reevaluaciones: reevaluaciones.length,
+          devoluciones: devoluciones.length,
+          reuniones_colegio: reuniones.length,
+          ingresosSesiones,
+          ingresosEvaluaciones,
+          ingresosReevaluaciones,
+          ingresosDevoluciones,
+          ingresosReuniones
+        },
+        supervisionesDetalle: {
+          supervisiones: {
+            cantidad: sesionesSupervisiones.length,
+            monto: gastoSupervisionesDirectas
+          },
+          acomp_evaluaciones: {
+            cantidad: acompEvaluaciones.length,
+            monto: acompEvaluaciones.reduce((t, s) => t + ((s.precio_por_hora * s.duracion_horas) * 0.5), 0)
+          },
+          acomp_reevaluaciones: {
+            cantidad: acompReevaluaciones.length,
+            monto: acompReevaluaciones.reduce((t, s) => t + ((s.precio_por_hora * s.duracion_horas) * 0.5), 0)
+          },
+          acomp_devoluciones: {
+            cantidad: acompDevoluciones.length,
+            monto: acompDevoluciones.reduce((t, s) => t + ((s.precio_por_hora * s.duracion_horas) * 0.5), 0)
+          },
+          acomp_reuniones: {
+            cantidad: acompReuniones.length,
+            monto: acompReuniones.reduce((t, s) => t + ((s.precio_por_hora * s.duracion_horas) * 0.5), 0)
+          },
+          acomp_sesiones: {
+            cantidad: acompSesiones.length,
+            monto: acompSesiones.reduce((t, s) => t + ((s.precio_por_hora * s.duracion_horas) * 0.5), 0)
+          }
+        },
+        estimaciones: {
+          supervisionesEstimadas,
+          horasEstimadas,
+          montoEstimado: gastoSupervisionesEstimado
+        }
       });
 
-      console.log('📊 Proyección calculada:', {
+      console.log('📊 Estimado calculado:', {
         ingresos: totalIngresos,
         gastoSupervision: totalGastoSupervision,
         gastoAlquiler,
-        gananciaNeta
+        gananciaNeta,
+        supervisionesReales: supervisionesRealesDelMes,
+        supervisionesEstimadas,
+        horasEstimadas
       });
 
     } catch (error) {
-      console.error('Error calculando proyección:', error);
-      const fallback = calculateCurrentMonthProfitFallback();
-      setDatosProyeccion(fallback);
+      console.error('Error calculando estimado:', error);
+      // En caso de error, usar valores vacíos
+      setDatosProyeccion({
+        gananciaNeta: 0,
+        ingresos: 0,
+        gastoSupervision: 0,
+        gastoAlquiler: 0,
+        detalle: {
+          sesiones: 0,
+          evaluaciones: 0,
+          reevaluaciones: 0,
+          devoluciones: 0,
+          reuniones_colegio: 0,
+          ingresosSesiones: 0,
+          ingresosEvaluaciones: 0,
+          ingresosReevaluaciones: 0,
+          ingresosDevoluciones: 0,
+          ingresosReuniones: 0
+        },
+        supervisionesDetalle: {
+          supervisiones: { cantidad: 0, monto: 0 },
+          acomp_evaluaciones: { cantidad: 0, monto: 0 },
+          acomp_reevaluaciones: { cantidad: 0, monto: 0 },
+          acomp_devoluciones: { cantidad: 0, monto: 0 },
+          acomp_reuniones: { cantidad: 0, monto: 0 },
+          acomp_sesiones: { cantidad: 0, monto: 0 }
+        },
+        estimaciones: {
+          supervisionesEstimadas: 0,
+          horasEstimadas: 0,
+          montoEstimado: 0
+        }
+      });
     }
-  };
-
-  // Función fallback en caso de error
-  const calculateCurrentMonthProfitFallback = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    const sesionesDelMes = sesiones.filter(sesion => {
-      const fechaSesion = new Date(sesion.fecha_hora);
-      return fechaSesion.getMonth() === currentMonth &&
-        fechaSesion.getFullYear() === currentYear &&
-        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado);
-    });
-
-    const sesionesIngresos = sesionesDelMes.filter(sesion => sesion.paciente_id);
-    const sesionesSupervisiones = sesionesDelMes.filter(sesion => sesion.supervisora_id);
-
-    const sesionesNormales = sesionesIngresos.filter(s => s.tipo_sesion === 'Sesión');
-    const evaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Evaluación');
-    const reevaluaciones = sesionesIngresos.filter(s => s.tipo_sesion === 'Re-evaluación');
-
-    const ingresosSesiones = sesionesNormales.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
-    const ingresosEvaluaciones = evaluaciones.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
-    const ingresosReevaluaciones = reevaluaciones.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
-
-    const ingresos = ingresosSesiones + ingresosEvaluaciones + ingresosReevaluaciones;
-    const gastoSupervision = sesionesSupervisiones.reduce((total, sesion) => {
-      return total + (sesion.precio_por_hora * sesion.duracion_horas);
-    }, 0);
-
-    const gastoAlquiler = alquilerConfig.precio_mensual || 0;
-    const gananciaNeta = ingresos - gastoSupervision - gastoAlquiler;
-
-    return {
-      gananciaNeta,
-      ingresos,
-      gastoSupervision,
-      gastoAlquiler,
-      detalle: {
-        sesiones: sesionesNormales.length,
-        evaluaciones: evaluaciones.length,
-        reevaluaciones: reevaluaciones.length,
-        devoluciones: 0,
-        reuniones_colegio: 0,
-        ingresosSesiones,
-        ingresosEvaluaciones,
-        ingresosReevaluaciones,
-        ingresosDevoluciones: 0,
-        ingresosReuniones: 0
-      },
-      supervisionesDetalle: {
-        supervisiones: { cantidad: sesionesSupervisiones.length, monto: gastoSupervision },
-        acomp_evaluaciones: { cantidad: 0, monto: 0 },
-        acomp_reevaluaciones: { cantidad: 0, monto: 0 },
-        acomp_devoluciones: { cantidad: 0, monto: 0 },
-        acomp_reuniones: { cantidad: 0, monto: 0 },
-        acomp_sesiones: { cantidad: 0, monto: 0 }
-      }
-    };
   };
 
   const subirFotoPerfil = async (file) => {
@@ -322,7 +330,6 @@ const Sidebar = ({
     }
   };
 
-  // 🚀 MODIFICADA: Actualizar perfil completo
   const actualizarPerfil = async () => {
     try {
       const { error } = await supabase
@@ -358,7 +365,6 @@ const Sidebar = ({
     }
   };
 
-  // 🚀 NUEVA: Iniciar edición de perfil
   const iniciarEdicionPerfil = () => {
     setEditandoPerfil(true);
     setPerfilTemporal({
@@ -369,7 +375,6 @@ const Sidebar = ({
     });
   };
 
-  // 🚀 NUEVA: Cancelar edición
   const cancelarEdicionPerfil = () => {
     setEditandoPerfil(false);
     setPerfilTemporal({});
@@ -389,7 +394,7 @@ const Sidebar = ({
     return `${amount.toLocaleString()} ARS`;
   };
 
-  const { gananciaNeta, gastoAlquiler, detalle, supervisionesDetalle } = datosProyeccion;
+  const { gananciaNeta, gastoAlquiler, detalle, supervisionesDetalle, estimaciones } = datosProyeccion;
   const nombreMes = new Date().toLocaleDateString('es-AR', { month: 'long' });
 
   const menuItems = [
@@ -404,7 +409,7 @@ const Sidebar = ({
 
   return (
     <div className="w-72 sidebar-fixed text-white flex-shrink-0 flex flex-col h-screen">
-      {/* Header con Perfil - EXPANDIDO PARA EDICIÓN */}
+      {/* 🚀 Header con Perfil MEJORADO */}
       <div className="p-4 flex-shrink-0">
         <div className="flex items-center gap-3">
           {/* Foto de Perfil */}
@@ -430,40 +435,77 @@ const Sidebar = ({
             />
           </div>
 
-          {/* Información Personal */}
+          {/* 🚀 Información Personal MEJORADA */}
           <div className="flex-1">
             {editandoPerfil ? (
-              // 🚀 NUEVO: Formulario de edición completo
               <div className="space-y-2">
-                <input
-                  type="text"
-                  value={perfilTemporal.nombre_completo || ''}
-                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, nombre_completo: e.target.value }))}
-                  className="w-full bg-white/10 text-gray-900 text-xs font-medium px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
-                  placeholder="Nombre completo"
-                />
-                <input
-                  type="text"
-                  value={perfilTemporal.titulo || ''}
-                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, titulo: e.target.value }))}
-                  className="w-full bg-white/10 text-gray-900 text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
-                  placeholder="Título profesional"
-                />
-                <input
-                  type="text"
-                  value={perfilTemporal.apodo || ''}
-                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, apodo: e.target.value }))}
-                  className="w-full bg-white/10 text-gray-900 text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
-                  placeholder="Tu apodo (para mensajes)"
-                />
-                <input
-                  type="text"
-                  value={perfilTemporal.alias_pago || ''}
-                  onChange={(e) => setPerfilTemporal(prev => ({ ...prev, alias_pago: e.target.value }))}
-                  className="w-full bg-white/10 text-gray-900 text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-gray-600"
-                  placeholder="Alias de pago"
-                />
-                <div className="flex gap-1">
+                {/* Header de edición */}
+                <div className="flex items-center gap-2 mb-3">
+                  <UserCog size={12} className="text-yellow-300" />
+                  <span className="text-xs text-yellow-300 font-medium">Editando perfil</span>
+                </div>
+
+                {/* Nombre completo */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <User size={10} className="text-purple-200" />
+                    <span className="text-xs text-purple-200">Nombre completo</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={perfilTemporal.nombre_completo || ''}
+                    onChange={(e) => setPerfilTemporal(prev => ({ ...prev, nombre_completo: e.target.value }))}
+                    className="w-full bg-white/10 text-white text-xs font-medium px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-purple-300"
+                    placeholder="Ej: Victoria Güemes"
+                  />
+                </div>
+
+                {/* Título profesional */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <GraduationCap size={10} className="text-purple-200" />
+                    <span className="text-xs text-purple-200">Título profesional</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={perfilTemporal.titulo || ''}
+                    onChange={(e) => setPerfilTemporal(prev => ({ ...prev, titulo: e.target.value }))}
+                    className="w-full bg-white/10 text-white text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-purple-300"
+                    placeholder="Ej: Lic. Psicopedagogía"
+                  />
+                </div>
+
+                {/* Apodo */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Heart size={10} className="text-purple-200" />
+                    <span className="text-xs text-purple-200">Apodo (para mensajes)</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={perfilTemporal.apodo || ''}
+                    onChange={(e) => setPerfilTemporal(prev => ({ ...prev, apodo: e.target.value }))}
+                    className="w-full bg-white/10 text-white text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-purple-300"
+                    placeholder="Ej: Vicky"
+                  />
+                </div>
+
+                {/* Alias de pago */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard size={10} className="text-purple-200" />
+                    <span className="text-xs text-purple-200">Alias de pago</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={perfilTemporal.alias_pago || ''}
+                    onChange={(e) => setPerfilTemporal(prev => ({ ...prev, alias_pago: e.target.value }))}
+                    className="w-full bg-white/10 text-white text-xs px-2 py-1 rounded border border-white/20 focus:outline-none focus:border-white/50 placeholder-purple-300"
+                    placeholder="Ej: victoriaguemes"
+                  />
+                </div>
+
+                <div className="flex gap-1 pt-1">
                   <button
                     onClick={actualizarPerfil}
                     className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
@@ -481,20 +523,23 @@ const Sidebar = ({
                 </div>
               </div>
             ) : (
-              // Vista normal SIN mostrar apodo y alias
-              <div className="flex items-center gap-1">
+              // Vista normal con botón mejorado
+              <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-sm font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
                     {perfilConfig.nombre_completo}
                   </h1>
                   <p className="text-purple-200 text-xs">{perfilConfig.titulo}</p>
                 </div>
+
+                {/* 🚀 BOTÓN MEJORADO */}
                 <button
                   onClick={iniciarEdicionPerfil}
-                  className="text-purple-200 hover:text-white opacity-70 hover:opacity-100"
-                  title="Editar perfil completo"
+                  className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-purple-200 hover:text-white transition-all group"
+                  title="Configurar perfil: nombre, título, apodo y alias de pago"
                 >
-                  <Edit3 size={12} />
+                  <UserCog size={11} className="group-hover:rotate-12 transition-transform" />
+                  <span className="text-xs font-medium">Editar</span>
                 </button>
               </div>
             )}
@@ -538,11 +583,11 @@ const Sidebar = ({
         </nav>
       </div>
 
-      {/* Ganancia neta del mes */}
+      {/* 🚀 Estimado del mes - Solo mes actual */}
       <div className="px-4 mb-6">
         <div className="p-3 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 flex-1 flex flex-col">
           <h4 className="text-xs text-purple-100 font-medium mb-2">
-            Ganancia proyectada de {nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}
+            Estimado de {nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}
           </h4>
 
           <div className={`text-lg font-bold mb-3 ${gananciaNeta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
@@ -631,6 +676,14 @@ const Sidebar = ({
               </div>
             )}
 
+            {/* 🚀 Mostrar supervisiones estimadas */}
+            {estimaciones.supervisionesEstimadas > 0 && (
+              <div className="flex justify-between">
+                <span>📈 Supervisiones ({estimaciones.supervisionesEstimadas} × 2h)</span>
+                <span className="text-red-300">-{formatCurrency(estimaciones.montoEstimado)}</span>
+              </div>
+            )}
+
             {gastoAlquiler > 0 && (
               <div className="flex justify-between">
                 <span>🏠 Alquiler</span>
@@ -643,6 +696,12 @@ const Sidebar = ({
               <div className="text-center font-medium text-xs">
                 {gananciaNeta >= 0 ? '📈 Ganancia' : '📉 Pérdida'} del mes
               </div>
+              {/* Nota aclaratoria sobre estimaciones */}
+              {estimaciones.supervisionesEstimadas > 0 && (
+                <div className="text-center text-xs text-purple-300 mt-1">
+                  💡 Incluye {estimaciones.supervisionesEstimadas} supervisión(es) estimada(s)
+                </div>
+              )}
             </div>
           </div>
         </div>

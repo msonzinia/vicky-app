@@ -978,34 +978,85 @@ function App() {
 
   // 🚀 NUEVA FUNCIÓN: Calcular ganancia neta para mobile header
   const calcularGananciaNeta = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const añoActual = hoy.getFullYear();
 
-    // Filtrar sesiones del mes actual
-    const sesionesDelMes = sesiones.filter(sesion => {
-      const fechaSesion = new Date(sesion.fecha_hora);
-      return fechaSesion.getMonth() === currentMonth &&
-        fechaSesion.getFullYear() === currentYear &&
-        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado);
+    console.log('📊 Calculando estimado para mes actual:', {
+      mes: mesActual + 1,
+      año: añoActual
     });
 
-    // Calcular ingresos
-    const sesionesIngresos = sesionesDelMes.filter(sesion => sesion.paciente_id);
-    const ingresos = sesionesIngresos.reduce((total, sesion) =>
-      total + (sesion.precio_por_hora * sesion.duracion_horas), 0);
+    // 1. Filtrar sesiones solo del mes actual
+    const sesionesDelMes = sesiones.filter(sesion => {
+      const fechaSesion = new Date(sesion.fecha_hora);
+      return fechaSesion.getMonth() === mesActual &&
+        fechaSesion.getFullYear() === añoActual;
+    });
 
-    // Calcular gastos de supervisión
-    const sesionesSupervisiones = sesionesDelMes.filter(sesion => sesion.supervisora_id);
-    const gastoSupervision = sesionesSupervisiones.reduce((total, sesion) => {
+    // 2. Estados que sí generan ingresos/gastos
+    const estadosQueFacturan = ['Realizada', 'Cancelada sin antelación', 'Pendiente'];
+
+    const sesionesFactivirables = sesionesDelMes.filter(sesion =>
+      estadosQueFacturan.includes(sesion.estado)
+    );
+
+    // 3. INGRESOS: Sesiones de pacientes
+    const sesionesIngresos = sesionesFactivirables.filter(sesion => sesion.paciente_id);
+    const totalIngresos = sesionesIngresos.reduce((total, sesion) => {
       return total + (sesion.precio_por_hora * sesion.duracion_horas);
     }, 0);
 
-    // Gasto de alquiler
-    const gastoAlquiler = alquilerConfig.precio_mensual || 0;
+    // 4. GASTOS: Supervisiones directas
+    const sesionesSupervisiones = sesionesFactivirables.filter(sesion => sesion.supervisora_id);
+    const gastoSupervisiones = sesionesSupervisiones.reduce((total, sesion) => {
+      return total + (sesion.precio_por_hora * sesion.duracion_horas);
+    }, 0);
 
-    // Ganancia neta
-    return ingresos - gastoSupervision - gastoAlquiler;
+    // 5. GASTOS: Acompañamientos de supervisoras (50% del precio de la sesión)
+    const sesionesConAcompanamiento = sesionesFactivirables.filter(sesion =>
+      sesion.acompañado_supervisora && sesion.supervisora_acompanante_id
+    );
+    const gastoAcompanamientos = sesionesConAcompanamiento.reduce((total, sesion) => {
+      return total + ((sesion.precio_por_hora * sesion.duracion_horas) * 0.5);
+    }, 0);
+
+    // 6. ESTIMACIÓN: Supervisiones regulares (2 promedio por mes si no hay suficientes)
+    let gastoSupervisionesEstimado = 0;
+    const supervisionesRealesDelMes = sesionesSupervisiones.length;
+
+    if (supervisionesRealesDelMes < 2 && supervisoras.length > 0) {
+      const supervisorasActivas = supervisoras.filter(s => !s.eliminado);
+      if (supervisorasActivas.length > 0) {
+        const precioPromedioSupervisora = supervisorasActivas.reduce((sum, s) =>
+          sum + s.precio_por_hora, 0) / supervisorasActivas.length;
+
+        const supervisionesFaltantes = 2 - supervisionesRealesDelMes;
+        gastoSupervisionesEstimado = precioPromedioSupervisora * 2 * supervisionesFaltantes; // 2 horas x supervisiones faltantes
+      }
+    }
+
+    // 7. GASTO: Alquiler mensual
+    const gastoAlquiler = alquilerConfig?.precio_mensual || 0;
+
+    // 8. CÁLCULO FINAL
+    const totalGastos = gastoSupervisiones + gastoAcompanamientos + gastoSupervisionesEstimado + gastoAlquiler;
+    const estimadoNeto = totalIngresos - totalGastos;
+
+    console.log('📋 Estimado del mes:', {
+      ingresos: totalIngresos,
+      gastos: {
+        supervisiones: gastoSupervisiones,
+        acompanamientos: gastoAcompanamientos,
+        supervisionesEstimadas: gastoSupervisionesEstimado,
+        alquiler: gastoAlquiler,
+        total: totalGastos
+      },
+      neto: estimadoNeto,
+      sesionesConsideradas: sesionesFactivirables.length
+    });
+
+    return estimadoNeto;
   };
 
   const formatCurrency = (amount, currency = currencyMode) => {
