@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 const CalendarioView = ({
   sesiones,
@@ -107,6 +107,69 @@ const CalendarioView = ({
     }
   };
 
+  // 🚀 NUEVO: Función para obtener el ícono de estado
+  const getStatusIcon = (sesion) => {
+    const hoy = new Date();
+    const fechaSesion = new Date(sesion.fecha_hora);
+    const esPasada = fechaSesion < hoy;
+
+    // Solo mostrar íconos de estado en sesiones que ya tienen un resultado final
+    if (sesion.estado === 'Realizada') {
+      return <CheckCircle size={12} className="text-white" />;
+    }
+
+    if (sesion.estado.includes('Cancelada')) {
+      return <XCircle size={12} className="text-white" />;
+    }
+
+    // Solo mostrar clock para pendientes pasadas (mantener animación existente)
+    if (sesion.estado === 'Pendiente' && esPasada) {
+      return <Clock size={12} className="text-yellow-600" />;
+    }
+
+    // Sesiones futuras sin ícono de estado
+    return null;
+  };
+
+  // 🚀 NUEVO: Función para obtener el estilo de la sesión (color + borde)
+  const getSessionStyle = (sesion) => {
+    const hoy = new Date();
+    const fechaSesion = new Date(sesion.fecha_hora);
+    const esPasada = fechaSesion < hoy;
+    const isPending = sesion.estado === 'Pendiente' && esPasada;
+
+    const paciente = getPacienteById(sesion.paciente_id);
+    const backgroundColor = paciente?.color || '#6b7280';
+
+    // Mantener el borde amarillo existente para pendientes pasadas
+    if (isPending) {
+      return {
+        backgroundColor,
+        border: '1px solid #f59e0b'
+      };
+    }
+
+    // Nuevos bordes para estados finalizados
+    if (sesion.estado === 'Realizada') {
+      return {
+        backgroundColor,
+        border: '2px solid #10b981' // Verde
+      };
+    }
+
+    if (sesion.estado.includes('Cancelada')) {
+      return {
+        backgroundColor,
+        border: '2px solid #ef4444' // Rojo
+      };
+    }
+
+    // Sesiones futuras sin borde especial
+    return {
+      backgroundColor
+    };
+  };
+
   // Componente del día
   const DayCell = ({ fecha, sesionesDelDia }) => {
     const isToday = fecha.toDateString() === new Date().toDateString();
@@ -117,11 +180,6 @@ const CalendarioView = ({
       s.estado === 'Pendiente' && new Date(s.fecha_hora) < hoy
     );
     const hasPending = pendingSessions.length > 0;
-
-    const getSessionColor = (sesion) => {
-      const paciente = getPacienteById(sesion.paciente_id);
-      return paciente?.color || '#6b7280';
-    };
 
     return (
       <div
@@ -153,10 +211,7 @@ const CalendarioView = ({
               <div
                 key={sesion.id}
                 className={`session-item ${isPending ? 'pending' : ''}`}
-                style={{
-                  backgroundColor: getSessionColor(sesion),
-                  border: isPending ? '1px solid #f59e0b' : 'none'
-                }}
+                style={getSessionStyle(sesion)}
                 onClick={(e) => {
                   e.stopPropagation();
                   openModal('edit-sesion', sesion);
@@ -168,6 +223,10 @@ const CalendarioView = ({
                   <span className="session-time">{hora}</span>
                   <span className="session-name">
                     {persona?.nombre_apellido || 'Sin asignar'}
+                  </span>
+                  {/* 🚀 NUEVO: Ícono de estado */}
+                  <span className="session-status-icon ml-auto">
+                    {getStatusIcon(sesion)}
                   </span>
                   {isPending && <span className="session-warning">!</span>}
                 </div>
@@ -298,7 +357,7 @@ const CalendarioView = ({
       {/* Leyenda - MÁS COMPACTA con íconos corregidos */}
       <div className="glass-effect p-3 rounded-xl">
         <h4 className="font-semibold text-gray-800 mb-2 text-xs">Leyenda</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Colores por paciente */}
           <div>
             <h5 className="font-medium text-gray-700 mb-1 text-xs">Pacientes:</h5>
@@ -320,12 +379,25 @@ const CalendarioView = ({
             <h5 className="font-medium text-gray-700 mb-1 text-xs">Estados:</h5>
             <div className="space-y-1 text-xs">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 border-2 border-yellow-500 rounded bg-white"></div>
-                <span>Pendiente de categorizar</span>
+                <CheckCircle size={12} className="text-white bg-green-600 rounded-full" />
+                <span>Realizada (borde verde)</span>
               </div>
-              <div className="text-xs text-gray-600 mt-1">
-                <span className="font-medium">Íconos:</span> 🧠 Sesión • 📋 Evaluación • 📝 Re-evaluación • 🔄 Devolución • 🏫 Reunión colegio • 👥 Supervisión
+              <div className="flex items-center gap-2">
+                <XCircle size={12} className="text-white bg-red-600 rounded-full" />
+                <span>Cancelada (borde rojo)</span>
               </div>
+              <div className="flex items-center gap-2">
+                <Clock size={12} className="text-yellow-600" />
+                <span>Pendiente pasada (borde amarillo)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tipos de sesión */}
+          <div>
+            <h5 className="font-medium text-gray-700 mb-1 text-xs">Tipos:</h5>
+            <div className="text-xs text-gray-600">
+              <span className="font-medium">Íconos:</span> 🧠 Sesión • 📋 Evaluación • 📝 Re-evaluación • 🔄 Devolución • 🏫 Reunión colegio • 👥 Supervisión
             </div>
           </div>
         </div>

@@ -399,14 +399,15 @@ const Sidebar = ({
   const nombreMes = new Date().toLocaleDateString('es-AR', { month: 'long' });
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'calendario', label: 'Calendario', icon: Calendar },
     { id: 'entradas', label: 'Entradas', icon: ArrowDownToLine },
     { id: 'salidas', label: 'Salidas', icon: ArrowUpFromLine },
     { id: 'facturar', label: 'Facturar', icon: Receipt },
     { id: 'pacientes', label: 'Pacientes', icon: Users },
     { id: 'coordinadoras', label: 'Supervisoras', icon: UserCheck },
-    { id: 'alquiler', label: 'Alquiler', icon: Home }
+    { id: 'alquiler', label: 'Alquiler', icon: Home },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 }
+
   ];
 
   return (

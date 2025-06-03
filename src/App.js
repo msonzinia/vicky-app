@@ -530,7 +530,7 @@ const actualizarNombrePacienteEnSesiones = async (pacienteId, nuevoNombre) => {
 
 function App() {
   // Estados principales
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState('calendario');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
