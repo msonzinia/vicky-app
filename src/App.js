@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabase';
 
 // Componentes existentes
@@ -11,6 +11,7 @@ import AlquilerView from './components/AlquilerView';
 import EntradaSView from './components/EntradaSView';
 import SalidasView from './components/SalidasView';
 import FacturarView from './components/FacturarView';
+import DashboardView from './components/DashboardView';
 import Modal from './components/Modal';
 import CategorizarModal from './components/CategorizarModal';
 import DayDetailModal from './components/DayDetailModal';
@@ -529,7 +530,7 @@ const actualizarNombrePacienteEnSesiones = async (pacienteId, nuevoNombre) => {
 
 function App() {
   // Estados principales
-  const [activeView, setActiveView] = useState('calendario');
+  const [activeView, setActiveView] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
@@ -562,34 +563,15 @@ function App() {
   const [sesionConConflicto, setSesionConConflicto] = useState(null);
 
   // ============================================================================
-  // ✅ FUNCIONES CORREGIDAS PARA FECHAS EN ARGENTINA (UTC-3)
+  // ✅ FUNCIONES HELPER Y UTILITARIAS (definidas primero)
   // ============================================================================
 
-  const convertirFechaParaGuardar = (fechaInput) => {
+  const convertirFechaParaGuardar = useCallback((fechaInput) => {
     if (!fechaInput) return null;
+    return fechaInput.replace('T', ' ') + ':00';
+  }, []);
 
-    try {
-      const [fechaStr, horaStr] = fechaInput.split('T');
-      const [año, mes, dia] = fechaStr.split('-').map(Number);
-      const [hora, minuto] = horaStr.split(':').map(Number);
-
-      // Crear fecha local
-      const fechaLocal = new Date(año, mes - 1, dia, hora, minuto);
-
-      // Construir manualmente string local sin timezone
-      const pad = (n) => String(n).padStart(2, '0');
-      const fechaFinal = `${año}-${pad(mes)}-${pad(dia)} ${pad(hora)}:${pad(minuto)}:00`;
-
-      console.log('🕐 Fecha final local para guardar:', fechaFinal);
-
-      return fechaFinal;
-    } catch (error) {
-      console.error('❌ Error convirtiendo fecha para guardar:', error);
-      return fechaInput;
-    }
-  };
-
-  const convertirFechaParaInput = (fechaISO) => {
+  const convertirFechaParaInput = useCallback((fechaISO) => {
     if (!fechaISO) return '';
 
     try {
@@ -618,9 +600,9 @@ function App() {
       console.error('❌ Error formateando fecha para input:', error);
       return '';
     }
-  };
+  }, []);
 
-  const diagnosticarFechasEnSesiones = async () => {
+  const diagnosticarFechasEnSesiones = useCallback(async () => {
     try {
       console.log('🔍 Iniciando diagnóstico de fechas...');
 
@@ -637,14 +619,12 @@ function App() {
 
       sesiones.forEach((sesion, index) => {
         const fecha = new Date(sesion.fecha_hora);
-        const fechaLocal = new Date(fecha.toLocaleString());
 
         console.log(`Sesión ${index + 1}:`, {
           id: sesion.id,
           tipo: sesion.tipo_sesion,
           fecha_iso: sesion.fecha_hora,
           fecha_parseada: fecha.toString(),
-          fecha_local: fechaLocal.toString(),
           dia_semana: fecha.getDay(),
           hora: fecha.getHours() + ':' + fecha.getMinutes().toString().padStart(2, '0')
         });
@@ -655,9 +635,9 @@ function App() {
     } catch (error) {
       console.error('❌ Error en diagnóstico:', error);
     }
-  };
+  }, []);
 
-  const diagnosticarZonaHoraria = () => {
+  const diagnosticarZonaHoraria = useCallback(() => {
     console.log('🔍 DIAGNÓSTICO DE ZONA HORARIA ARGENTINA:');
 
     const ahora = new Date();
@@ -684,7 +664,167 @@ function App() {
       const fechaDB = new Date(fechaGuardada);
       console.log('🗄️ En base de datos se ve como:', fechaDB.toLocaleString('es-AR'));
     }
-  };
+  }, [convertirFechaParaGuardar, convertirFechaParaInput]);
+
+  const loadExampleData = useCallback(() => {
+    setPacientes([
+      {
+        id: '1',
+        nombre_apellido: 'Juan Pérez',
+        nombre_apellido_tutor: 'Carlos Pérez',
+        cuil: '20-12345678-9',
+        precio_por_hora: 15000,
+        fecha_inicio: '2025-01-15',
+        activo: true,
+        eliminado: false,
+        color: '#3B82F6',
+        horarios: [{ id: 'h1', dia_semana: 2, hora_inicio: '10:00' }]
+      },
+      {
+        id: '2',
+        nombre_apellido: 'María García',
+        nombre_apellido_tutor: 'Laura García',
+        cuil: '27-87654321-3',
+        precio_por_hora: 18000,
+        fecha_inicio: '2025-01-20',
+        activo: true,
+        eliminado: false,
+        color: '#EF4444',
+        horarios: [{ id: 'h2', dia_semana: 4, hora_inicio: '14:00' }]
+      }
+    ]);
+
+    setSupervisoras([
+      { id: '1', nombre_apellido: 'Dra. María González', precio_por_hora: 8000 },
+      { id: '2', nombre_apellido: 'Lic. Ana Rodríguez', precio_por_hora: 7500 }
+    ]);
+
+    const sesionesEjemplo = [];
+    const hoy = new Date();
+    for (let i = -7; i <= 30; i++) {
+      const fecha = new Date(hoy);
+      fecha.setDate(hoy.getDate() + i);
+      fecha.setHours(10, 0, 0, 0);
+
+      if (fecha.getDay() === 2) {
+        sesionesEjemplo.push({
+          id: `s1-${i}`,
+          tipo_sesion: 'Sesión',
+          paciente_id: '1',
+          supervisora_id: null,
+          fecha_hora: fecha.toISOString(),
+          precio_por_hora: 15000,
+          duracion_horas: 1,
+          estado: i < 0 ? 'Pendiente' : 'Pendiente',
+          auto_generada: true,
+          modificada_manualmente: false,
+          eliminado: false,
+          horario_origen_id: 'h1'
+        });
+      }
+      if (fecha.getDay() === 4) {
+        fecha.setHours(14, 0, 0, 0);
+        sesionesEjemplo.push({
+          id: `s2-${i}`,
+          tipo_sesion: 'Sesión',
+          paciente_id: '2',
+          supervisora_id: null,
+          fecha_hora: fecha.toISOString(),
+          precio_por_hora: 18000,
+          duracion_horas: 1,
+          estado: i < 0 ? 'Pendiente' : 'Pendiente',
+          auto_generada: true,
+          modificada_manualmente: false,
+          eliminado: false,
+          horario_origen_id: 'h2'
+        });
+      }
+    }
+    setSesiones(sesionesEjemplo);
+
+    const pendientes = sesionesEjemplo.filter(s =>
+      s.estado === 'Pendiente' && new Date(s.fecha_hora) < hoy && !s.eliminado
+    ).length;
+    setSesionsPendientes(pendientes);
+  }, []);
+
+  const loadInitialData = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const { data: pacientesData, error: pacientesError } = await supabase
+        .from('pacientes')
+        .select(`
+          *,
+          horarios_pacientes (
+            id,
+            dia_semana,
+            hora_inicio
+          )
+        `)
+        .order('eliminado')
+        .order('activo', { ascending: false })
+        .order('nombre_apellido');
+
+      if (pacientesError) throw pacientesError;
+
+      const pacientesConHorarios = (pacientesData || []).map(paciente => ({
+        ...paciente,
+        horarios: paciente.horarios_pacientes || []
+      }));
+
+      setPacientes(pacientesConHorarios);
+
+      const { data: supervisorasData, error: supervisorasError } = await supabase
+        .from('supervisoras')
+        .select('*')
+        .eq('eliminado', false)
+        .order('nombre_apellido');
+
+      if (supervisorasError) throw supervisorasError;
+      setSupervisoras(supervisorasData || []);
+
+      const fechaInicio = new Date();
+      fechaInicio.setMonth(fechaInicio.getMonth() - 3);
+
+      const { data: sesionesData, error: sesionesError } = await supabase
+        .from('sesiones')
+        .select('*')
+        .eq('eliminado', false)
+        .gte('fecha_hora', fechaInicio.toISOString())
+        .order('fecha_hora');
+
+      if (sesionesError) throw sesionesError;
+      setSesiones(sesionesData || []);
+
+      const pendientes = (sesionesData || []).filter(s =>
+        s.estado === 'Pendiente' && new Date(s.fecha_hora) < new Date() && !s.eliminado
+      ).length;
+      setSesionsPendientes(pendientes);
+
+      const { data: alquilerData, error: alquilerError } = await supabase
+        .from('configuracion_alquiler')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (!alquilerError && alquilerData) {
+        setAlquilerConfig(alquilerData);
+      }
+
+      setTipoCambio(1150);
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      loadExampleData();
+    } finally {
+      setLoading(false);
+    }
+  }, [loadExampleData]);
+
+
+
+
 
   // ============================================================================
   // FUNCIONES PARA VALIDACIÓN DE CONFLICTOS
@@ -796,93 +936,22 @@ function App() {
       delete window.diagnosticarFechasEnSesiones;
       delete window.diagnosticarZonaHoraria;
     };
-  }, []);
+  }, [diagnosticarFechasEnSesiones, diagnosticarZonaHoraria]);
 
   // Cargar datos iniciales
   useEffect(() => {
     loadInitialData();
-  }, []);
+  }, [loadInitialData]);
 
-  // 🚀 NUEVO: Cerrar sidebar mobile cuando cambia la vista
+  // 🚀 Redirigir a vista 'calendario' si estamos en mobile al iniciar
   useEffect(() => {
-    if (isMobile) {
-      setSidebarMobileOpen(false);
+    if (isMobile && activeView === 'dashboard') {
+      setActiveView('calendario');
     }
-  }, [activeView, isMobile]);
+  }, [isMobile, activeView]);
 
-  const loadInitialData = async () => {
-    try {
-      setLoading(true);
 
-      const { data: pacientesData, error: pacientesError } = await supabase
-        .from('pacientes')
-        .select(`
-          *,
-          horarios_pacientes (
-            id,
-            dia_semana,
-            hora_inicio
-          )
-        `)
-        .order('eliminado')
-        .order('activo', { ascending: false })
-        .order('nombre_apellido');
 
-      if (pacientesError) throw pacientesError;
-
-      const pacientesConHorarios = (pacientesData || []).map(paciente => ({
-        ...paciente,
-        horarios: paciente.horarios_pacientes || []
-      }));
-
-      setPacientes(pacientesConHorarios);
-
-      const { data: supervisorasData, error: supervisorasError } = await supabase
-        .from('supervisoras')
-        .select('*')
-        .eq('eliminado', false)
-        .order('nombre_apellido');
-
-      if (supervisorasError) throw supervisorasError;
-      setSupervisoras(supervisorasData || []);
-
-      const fechaInicio = new Date();
-      fechaInicio.setMonth(fechaInicio.getMonth() - 3);
-
-      const { data: sesionesData, error: sesionesError } = await supabase
-        .from('sesiones')
-        .select('*')
-        .eq('eliminado', false)
-        .gte('fecha_hora', fechaInicio.toISOString())
-        .order('fecha_hora');
-
-      if (sesionesError) throw sesionesError;
-      setSesiones(sesionesData || []);
-
-      const pendientes = (sesionesData || []).filter(s =>
-        s.estado === 'Pendiente' && new Date(s.fecha_hora) < new Date() && !s.eliminado
-      ).length;
-      setSesionsPendientes(pendientes);
-
-      const { data: alquilerData, error: alquilerError } = await supabase
-        .from('configuracion_alquiler')
-        .select('*')
-        .limit(1)
-        .single();
-
-      if (!alquilerError && alquilerData) {
-        setAlquilerConfig(alquilerData);
-      }
-
-      setTipoCambio(1150);
-
-    } catch (error) {
-      console.error('Error loading data:', error);
-      loadExampleData();
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     if (pacientes.length > 0) {
@@ -894,87 +963,7 @@ function App() {
     }
   }, [pacientes]);
 
-  const loadExampleData = () => {
-    setPacientes([
-      {
-        id: '1',
-        nombre_apellido: 'Juan Pérez',
-        nombre_apellido_tutor: 'Carlos Pérez',
-        cuil: '20-12345678-9',
-        precio_por_hora: 15000,
-        fecha_inicio: '2025-01-15',
-        activo: true,
-        eliminado: false,
-        color: '#3B82F6',
-        horarios: [{ id: 'h1', dia_semana: 2, hora_inicio: '10:00' }]
-      },
-      {
-        id: '2',
-        nombre_apellido: 'María García',
-        nombre_apellido_tutor: 'Laura García',
-        cuil: '27-87654321-3',
-        precio_por_hora: 18000,
-        fecha_inicio: '2025-01-20',
-        activo: true,
-        eliminado: false,
-        color: '#EF4444',
-        horarios: [{ id: 'h2', dia_semana: 4, hora_inicio: '14:00' }]
-      }
-    ]);
 
-    setSupervisoras([
-      { id: '1', nombre_apellido: 'Dra. María González', precio_por_hora: 8000 },
-      { id: '2', nombre_apellido: 'Lic. Ana Rodríguez', precio_por_hora: 7500 }
-    ]);
-
-    const sesionesEjemplo = [];
-    const hoy = new Date();
-    for (let i = -7; i <= 30; i++) {
-      const fecha = new Date(hoy);
-      fecha.setDate(hoy.getDate() + i);
-      fecha.setHours(10, 0, 0, 0);
-
-      if (fecha.getDay() === 2) {
-        sesionesEjemplo.push({
-          id: `s1-${i}`,
-          tipo_sesion: 'Sesión',
-          paciente_id: '1',
-          supervisora_id: null,
-          fecha_hora: fecha.toISOString(),
-          precio_por_hora: 15000,
-          duracion_horas: 1,
-          estado: i < 0 ? 'Pendiente' : 'Pendiente',
-          auto_generada: true,
-          modificada_manualmente: false,
-          eliminado: false,
-          horario_origen_id: 'h1'
-        });
-      }
-      if (fecha.getDay() === 4) {
-        fecha.setHours(14, 0, 0, 0);
-        sesionesEjemplo.push({
-          id: `s2-${i}`,
-          tipo_sesion: 'Sesión',
-          paciente_id: '2',
-          supervisora_id: null,
-          fecha_hora: fecha.toISOString(),
-          precio_por_hora: 18000,
-          duracion_horas: 1,
-          estado: i < 0 ? 'Pendiente' : 'Pendiente',
-          auto_generada: true,
-          modificada_manualmente: false,
-          eliminado: false,
-          horario_origen_id: 'h2'
-        });
-      }
-    }
-    setSesiones(sesionesEjemplo);
-
-    const pendientes = sesionesEjemplo.filter(s =>
-      s.estado === 'Pendiente' && new Date(s.fecha_hora) < hoy && !s.eliminado
-    ).length;
-    setSesionsPendientes(pendientes);
-  };
 
   // 🚀 NUEVA FUNCIÓN: Calcular ganancia neta para mobile header
   const calcularGananciaNeta = () => {
@@ -1797,6 +1786,13 @@ function App() {
 
   const renderCurrentView = () => {
     switch (activeView) {
+      case 'dashboard':
+        return (
+          <DashboardView
+            currencyMode={currencyMode}
+            tipoCambio={tipoCambio}
+          />
+        );
       case 'calendario':
         return (
           <CalendarioView

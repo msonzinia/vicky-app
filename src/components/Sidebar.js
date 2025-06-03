@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Edit3, Save, X, UserCog, User, GraduationCap, Heart, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Save, X, UserCog, User, GraduationCap, Heart, CreditCard, BarChart3 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const Sidebar = ({
@@ -99,7 +99,7 @@ const Sidebar = ({
   };
 
   // 🚀 FUNCIÓN: Calcular estimado SOLO del mes actual
-  const calcularEstimadoMesActual = () => {
+  const calcularEstimadoMesActual = useCallback(() => {
     try {
       const hoy = new Date();
       const mesActual = hoy.getMonth();
@@ -293,7 +293,8 @@ const Sidebar = ({
         }
       });
     }
-  };
+  }, [sesiones, supervisoras, alquilerConfig]);
+
 
   const subirFotoPerfil = async (file) => {
     try {
@@ -398,6 +399,7 @@ const Sidebar = ({
   const nombreMes = new Date().toLocaleDateString('es-AR', { month: 'long' });
 
   const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'calendario', label: 'Calendario', icon: Calendar },
     { id: 'entradas', label: 'Entradas', icon: ArrowDownToLine },
     { id: 'salidas', label: 'Salidas', icon: ArrowUpFromLine },

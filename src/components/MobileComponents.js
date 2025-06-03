@@ -272,11 +272,17 @@ export const CalendarioMobile = ({
   };
 
   // Obtener sesiones del día actual
+  // Función auxiliar para comparar fechas en hora local (ignora hora/min/seg)
+  const getFechaLocal = (fecha) => {
+    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  };
+
+  // Obtener sesiones del día actual (comparando fechas en hora local)
   const getSesionesDelDia = (fecha) => {
-    const fechaStr = fecha.toISOString().split('T')[0];
+    const fechaBase = getFechaLocal(fecha);
     return sesiones.filter(sesion => {
-      const sesionFecha = new Date(sesion.fecha_hora).toISOString().split('T')[0];
-      return sesionFecha === fechaStr;
+      const sesionFecha = getFechaLocal(new Date(sesion.fecha_hora));
+      return sesionFecha.getTime() === fechaBase.getTime();
     }).sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora));
   };
 
@@ -448,8 +454,8 @@ export const CalendarioMobile = ({
                         {/* Estado - MÁS COMPACTO */}
                         <div className="mb-2">
                           <span className={`text-xs px-2 py-1 rounded-full font-bold ${sesion.estado === 'Realizada' ? 'bg-green-100 text-green-800' :
-                              sesion.estado === 'Pendiente' ? 'bg-red-100 text-red-800 animate-pulse' :
-                                'bg-gray-100 text-gray-800'
+                            sesion.estado === 'Pendiente' ? 'bg-red-100 text-red-800 animate-pulse' :
+                              'bg-gray-100 text-gray-800'
                             }`}>
                             {isPending ? '⚠️ SIN CATEGORIZAR' : sesion.estado}
                           </span>
