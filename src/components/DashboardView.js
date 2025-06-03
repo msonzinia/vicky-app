@@ -1,272 +1,252 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart3, TrendingUp, TrendingDown, Clock, DollarSign, Receipt, Settings, Save, X, AlertTriangle } from 'lucide-react';
-import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart } from 'recharts';
+import { BarChart3, TrendingUp, TrendingDown, Clock, DollarSign, UserX, Users, AlertTriangle, Calendar } from 'lucide-react';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie, BarChart } from 'recharts';
 import { supabase } from '../lib/supabase';
 
 const DashboardView = ({ currencyMode, tipoCambio }) => {
   const [loading, setLoading] = useState(true);
-  const [datosGanancias, setDatosGanancias] = useState([]);
-  const [datosFacturacion, setDatosFacturacion] = useState([]);
+  const [datosGrafico, setDatosGrafico] = useState([]);
+  const [metricas, setMetricas] = useState({
+    totalMeses: 0,
+    promedioGanancia: 0,
+    promedioHoras: 0,
+    promedioHorasPorDiaLaboral: 0,
+    mejorMes: null,
+    peorMes: null
+  });
+
+  // Estados para cancelaciones
   const [datosCancelaciones, setDatosCancelaciones] = useState([]);
-  const [metricas, setMetricas] = useState({});
-  const [monotributo, setMonotributo] = useState({});
-  const [pacienteSeleccionado, setPacienteSeleccionado] = useState('');
-  const [pacientesDisponibles, setPacientesDisponibles] = useState([]);
+  const [metricasCancelaciones, setMetricasCancelaciones] = useState({
+    totalPacientes: 0,
+    promedioInasistencia: 0,
+    pacienteMayorInasistencia: null,
+    pacienteMenorInasistencia: null
+  });
+  const [vistaHistoricaCancelaciones, setVistaHistoricaCancelaciones] = useState(false);
+  const [datosHistoricoCancelaciones, setDatosHistoricoCancelaciones] = useState([]);
 
-  // Estados para la tabla de monotributo
-  const [showMonotributoModal, setShowMonotributoModal] = useState(false);
-  const [categoriasMonotributo, setCategoriasMonotributo] = useState([
-    { codigo: 'A', facturacion_minima: 0, facturacion_maxima: 7813063, cuota_servicios: 32221, cuota_bienes: 32221 },
-    { codigo: 'B', facturacion_minima: 7813064, facturacion_maxima: 11447046, cuota_servicios: 36679, cuota_bienes: 36679 },
-    { codigo: 'C', facturacion_minima: 11447047, facturacion_maxima: 15645430, cuota_servicios: 42951, cuota_bienes: 42951 },
-    { codigo: 'D', facturacion_minima: 15645431, facturacion_maxima: 19575537, cuota_servicios: 51584, cuota_bienes: 51584 },
-    { codigo: 'E', facturacion_minima: 19575538, facturacion_maxima: 23440590, cuota_servicios: 77951, cuota_bienes: 70440 },
-    { codigo: 'F', facturacion_minima: 23440591, facturacion_maxima: 29376450, cuota_servicios: 98103, cuota_bienes: 84535 },
-    { codigo: 'G', facturacion_minima: 29376451, facturacion_maxima: 35130600, cuota_servicios: 149845, cuota_bienes: 103328 },
-    { codigo: 'H', facturacion_minima: 35130601, facturacion_maxima: 53301600, cuota_servicios: 340081, cuota_bienes: 206827 },
-    { codigo: 'I', facturacion_minima: 53301601, facturacion_maxima: 59661450, cuota_servicios: 626994, cuota_bienes: 309520 },
-    { codigo: 'J', facturacion_minima: 59661451, facturacion_maxima: 70603800, cuota_servicios: 759420, cuota_bienes: 377852 },
-    { codigo: 'K', facturacion_minima: 70603801, facturacion_maxima: 82370281, cuota_servicios: 1050324, cuota_bienes: 456773 }
-  ]);
-
-  const [editandoCategorias, setEditandoCategorias] = useState(false);
-  const [categoriasTemp, setCategoriasTemp] = useState([]);
-
-  const formatearMes = (fechaISO) => {
-    const fecha = new Date(fechaISO);
-    return fecha.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-  };
-
-  const formatearMesCorto = (fechaISO) => {
-    const fecha = new Date(fechaISO);
-    return fecha.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
-  };
-
+  // Cargar datos del dashboard financiero
   const cargarDatosDashboard = useCallback(async () => {
     try {
       setLoading(true);
 
-      // 1. Cargar datos de ganancias mensuales (ya filtradas desde mayo 2025)
-      const { data: ganancias, error: errorGanancias } = await supabase
-        .from('dashboard_ganancias_mensuales')
+      const { data: datosRaw, error } = await supabase
+        .from('dashboard_ganancia_horas_combinado')
         .select('*')
         .order('mes');
 
-      if (errorGanancias) {
-        console.error('Error cargando ganancias:', errorGanancias);
-        throw errorGanancias;
+      if (error) {
+        console.error('Error cargando datos del dashboard:', error);
+        throw error;
       }
 
-      // 2. Cargar datos de facturación mensual (ya filtrados desde mayo 2025)
-      const { data: facturacion, error: errorFacturacion } = await supabase
-        .from('dashboard_facturacion_mensual')
-        .select('*')
-        .order('mes');
-
-      if (errorFacturacion) {
-        console.error('Error cargando facturación:', errorFacturacion);
-        throw errorFacturacion;
-      }
-
-      // 3. Cargar datos de cancelaciones por paciente (ya filtrados desde mayo 2025)
-      const { data: cancelaciones, error: errorCancelaciones } = await supabase
-        .from('dashboard_cancelaciones_paciente')
-        .select('*')
-        .order('mes, paciente_nombre');
-
-      if (errorCancelaciones) {
-        console.error('Error cargando cancelaciones:', errorCancelaciones);
-        throw errorCancelaciones;
-      }
-
-      // 4. Cargar métricas de crecimiento
-      const { data: metricasData, error: errorMetricas } = await supabase
-        .from('dashboard_metricas_crecimiento')
-        .select('*')
-        .limit(1)
-        .single();
-
-      if (errorMetricas && errorMetricas.code !== 'PGRST116') {
-        console.error('Error cargando métricas:', errorMetricas);
-        throw errorMetricas;
-      }
-
-      // 5. Cargar datos de monotributo
-      const { data: monotributoData, error: errorMonotributo } = await supabase
-        .from('dashboard_monotributo')
-        .select('*')
-        .limit(1)
-        .single();
-
-      if (errorMonotributo && errorMonotributo.code !== 'PGRST116') {
-        console.error('Error cargando monotributo:', errorMonotributo);
-        throw errorMonotributo;
-      }
-
-      // Procesar datos para gráficos (solo si hay datos)
-      const gananciasFormateadas = (ganancias || [])
-        .filter(item => item.mes) // Solo registros con fecha válida
-        .map(item => ({
-          mes: formatearMes(item.mes),
-          mesCorto: formatearMesCorto(item.mes),
-          ganancia_neta: item.ganancia_neta || 0,
-          ingresos_sesiones: item.ingresos_sesiones || 0,
-          gastos_totales: item.gastos_totales || 0,
-          horas_trabajadas: item.horas_trabajadas || 0,
-          fecha: item.mes
-        }));
-
-      const facturacionFormateada = (facturacion || [])
-        .filter(item => item.mes) // Solo registros con fecha válida
-        .map(item => ({
-          mes: formatearMes(item.mes),
-          mesCorto: formatearMesCorto(item.mes),
-          porcentaje_facturado: item.porcentaje_facturado || 0,
-          porcentaje_no_facturado: 100 - (item.porcentaje_facturado || 0),
-          monto_facturado: item.monto_facturado || 0,
-          monto_no_facturado: item.monto_no_facturado || 0,
-          monto_total: item.monto_total || 0
-        }));
-
-      const cancelacionesFormateadas = (cancelaciones || [])
-        .filter(item => item.mes) // Solo registros con fecha válida
-        .map(item => ({
-          mes: formatearMes(item.mes),
-          mesCorto: formatearMesCorto(item.mes),
-          paciente_id: item.paciente_id,
-          paciente_nombre: item.paciente_nombre,
-          total_sesiones: item.total_sesiones || 0,
-          sesiones_canceladas: item.sesiones_canceladas || 0,
-          porcentaje_cancelacion: item.porcentaje_cancelacion || 0
-        }));
-
-      // Extraer lista de pacientes únicos
-      const pacientesUnicos = [...new Set(cancelacionesFormateadas.map(item => item.paciente_nombre))]
-        .sort()
-        .map(nombre => {
-          const item = cancelacionesFormateadas.find(c => c.paciente_nombre === nombre);
-          return {
-            id: item.paciente_id,
-            nombre: nombre
-          };
+      if (!datosRaw || datosRaw.length === 0) {
+        console.log('📊 No hay datos disponibles en el dashboard');
+        setDatosGrafico([]);
+        setMetricas({
+          totalMeses: 0,
+          promedioGanancia: 0,
+          promedioHoras: 0,
+          promedioHorasPorDiaLaboral: 0,
+          mejorMes: null,
+          peorMes: null
         });
+        return;
+      }
 
-      console.log('✅ Datos cargados:', {
-        ganancias: gananciasFormateadas.length,
-        facturacion: facturacionFormateada.length,
-        cancelaciones: cancelacionesFormateadas.length,
-        metricas: metricasData ? 'OK' : 'Sin datos',
-        monotributo: monotributoData ? 'OK' : 'Sin datos'
+      // Formatear datos para el gráfico
+      const datosFormateados = datosRaw.map(item => {
+        const fecha = new Date(item.mes);
+
+        return {
+          mes: fecha.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }),
+          mesCompleto: fecha.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }),
+          fechaOriginal: item.mes,
+
+          // Ganancias en ambas monedas
+          ganancia_ars: item.ganancia_neta_ars || 0,
+          ganancia_usd: item.ganancia_neta_usd || 0,
+
+          // Entradas y salidas para tooltips
+          entradas_ars: item.entradas_ars || 0,
+          entradas_usd: item.entradas_usd || 0,
+          salidas_ars: item.salidas_ars || 0,
+          salidas_usd: item.salidas_usd || 0,
+
+          // Horas trabajadas
+          horas: item.total_horas || 0,
+          dias_laborales: item.dias_laborales_mes || 22,
+          horas_por_dia_laboral: item.horas_promedio_por_dia_laboral || 0,
+
+          // Ganancia por hora
+          ganancia_por_hora_ars: item.ganancia_por_hora_ars || 0,
+          ganancia_por_hora_usd: item.ganancia_por_hora_usd || 0,
+
+          // Para el color de las barras
+          gananciaNegativa: (item.ganancia_neta_ars || 0) < 0
+        };
       });
 
-      setDatosGanancias(gananciasFormateadas);
-      setDatosFacturacion(facturacionFormateada);
-      setDatosCancelaciones(cancelacionesFormateadas);
-      setPacientesDisponibles(pacientesUnicos);
-      setMetricas(metricasData || {});
-      setMonotributo(monotributoData || {});
+      // Calcular métricas
+      const totalMeses = datosFormateados.length;
+      const promedioGananciaARS = datosFormateados.reduce((sum, item) => sum + item.ganancia_ars, 0) / totalMeses;
+      const promedioHoras = datosFormateados.reduce((sum, item) => sum + item.horas, 0) / totalMeses;
+
+      const totalHorasPorDiaLaboral = datosFormateados.reduce((sum, item) => sum + item.horas_por_dia_laboral, 0);
+      const promedioHorasPorDiaLaboral = totalHorasPorDiaLaboral / totalMeses;
+
+      // Encontrar mejor y peor mes
+      const mejorMes = datosFormateados.reduce((mejor, actual) =>
+        actual.ganancia_ars > mejor.ganancia_ars ? actual : mejor
+      );
+      const peorMes = datosFormateados.reduce((peor, actual) =>
+        actual.ganancia_ars < peor.ganancia_ars ? actual : peor
+      );
+
+      setDatosGrafico(datosFormateados);
+      setMetricas({
+        totalMeses,
+        promedioGanancia: promedioGananciaARS,
+        promedioHoras,
+        promedioHorasPorDiaLaboral,
+        mejorMes,
+        peorMes
+      });
 
     } catch (error) {
-      console.error('Error cargando datos del dashboard:', error);
+      console.error('Error cargando dashboard:', error);
+      setDatosGrafico([]);
+      setMetricas({
+        totalMeses: 0,
+        promedioGanancia: 0,
+        promedioHoras: 0,
+        promedioHorasPorDiaLaboral: 0,
+        mejorMes: null,
+        peorMes: null
+      });
+    }
+  }, []);
 
-      // En caso de error, usar datos vacíos
-      setDatosGanancias([]);
-      setDatosFacturacion([]);
+  // Cargar datos de cancelaciones
+  const cargarDatosCancelaciones = useCallback(async () => {
+    try {
+      // Cargar datos actuales
+      const { data: cancelacionesData, error: cancelacionesError } = await supabase
+        .from('dashboard_cancelaciones_paciente')
+        .select('*')
+        .order('porcentaje_inasistencia_paciente', { ascending: false });
+
+      if (cancelacionesError) throw cancelacionesError;
+
+      // Cargar datos históricos
+      const { data: historicoData, error: historicoError } = await supabase
+        .from('dashboard_cancelaciones_historico')
+        .select('*')
+        .eq('paciente_id', '00000000-0000-0000-0000-000000000000')  // UUID especial para TOTAL
+        .order('mes', { ascending: true });
+
+      if (historicoError) throw historicoError;
+
+      console.log('📊 Datos cancelaciones cargados:', {
+        actuales: cancelacionesData?.length || 0,
+        historico: historicoData?.length || 0
+      });
+
+      setDatosCancelaciones(cancelacionesData || []);
+      setDatosHistoricoCancelaciones(historicoData || []);
+
+      // Calcular métricas de cancelaciones
+      if (cancelacionesData && cancelacionesData.length > 0) {
+        const totalPacientes = cancelacionesData.length;
+        const promedioInasistencia = cancelacionesData.reduce((sum, item) => sum + item.porcentaje_inasistencia_paciente, 0) / totalPacientes;
+        const pacienteMayorInasistencia = cancelacionesData[0]; // Ya está ordenado desc
+        const pacienteMenorInasistencia = cancelacionesData[cancelacionesData.length - 1];
+
+        setMetricasCancelaciones({
+          totalPacientes,
+          promedioInasistencia: Math.round(promedioInasistencia * 10) / 10,
+          pacienteMayorInasistencia,
+          pacienteMenorInasistencia
+        });
+      }
+
+    } catch (error) {
+      console.error('Error cargando cancelaciones:', error);
       setDatosCancelaciones([]);
-      setPacientesDisponibles([]);
-      setMetricas({});
-      setMonotributo({});
-
-    } finally {
-      setLoading(false);
+      setDatosHistoricoCancelaciones([]);
     }
   }, []);
 
   useEffect(() => {
-    cargarDatosDashboard();
-  }, [cargarDatosDashboard]);
+    const cargarTodosLosDatos = async () => {
+      await Promise.all([
+        cargarDatosDashboard(),
+        cargarDatosCancelaciones()
+      ]);
+      setLoading(false);
+    };
+
+    cargarTodosLosDatos();
+  }, [cargarDatosDashboard, cargarDatosCancelaciones]);
 
   const formatCurrency = (amount, currency = currencyMode) => {
     if (currency === 'USD') {
-      return `$${(amount / tipoCambio).toFixed(0)} USD`;
+      return `${amount.toFixed(2)} USD`;
     }
-    return `$${amount.toLocaleString()} ARS`;
+    return `${Math.round(amount).toLocaleString()} ARS`;
   };
 
-  const determinarCategoriaMonotributo = (facturacion) => {
-    for (const categoria of categoriasMonotributo) {
-      if (facturacion >= categoria.facturacion_minima && facturacion <= categoria.facturacion_maxima) {
-        return categoria;
-      }
-    }
-    return categoriasMonotributo[categoriasMonotributo.length - 1]; // Última categoría si excede
+  const formatHours = (hours) => {
+    return `${hours.toFixed(1)}h`;
   };
 
-  const calcularProximaRecategorizacion = () => {
-    const hoy = new Date();
-    const mes = hoy.getMonth() + 1;
+  // Formatear datos de cancelaciones para gráficos
+  const datosCancelacionesParaGrafico = datosCancelaciones.slice(0, 10).map((item, index) => ({
+    nombre: item.paciente_nombre.split(' ')[0], // Solo primer nombre
+    nombreCompleto: item.paciente_nombre,
+    inasistencia: item.porcentaje_inasistencia_paciente,
+    asistencia: item.porcentaje_asistencia_paciente,
+    realizadas: item.realizadas,
+    canceladas_con_ant: item.canceladas_con_antelacion,
+    canceladas_sin_ant: item.canceladas_sin_antelacion,
+    canceladas_profesional: item.canceladas_por_profesional,
+    total_canceladas_paciente: item.total_canceladas_paciente,
+    total_validas: item.total_sesiones_validas,
+    total_programadas: item.total_sesiones_programadas,
+    color: item.porcentaje_inasistencia_paciente > 30 ? '#EF4444' :
+      item.porcentaje_inasistencia_paciente > 15 ? '#F59E0B' : '#10B981'
+  }));
 
-    if (mes >= 2 && mes <= 7) {
-      return { fecha: 'Agosto 2025', tipo: 'próxima' };
-    } else {
-      return { fecha: 'Febrero 2026', tipo: 'próxima' };
-    }
-  };
-
-  const obtenerDatosCancelacionesFiltrados = () => {
-    if (!pacienteSeleccionado) return datosCancelaciones;
-    return datosCancelaciones.filter(item => item.paciente_nombre === pacienteSeleccionado);
-  };
-
-  const guardarCategoriasMonotributo = async () => {
-    try {
-      // Aquí podrías guardar en una tabla de configuración si lo deseas
-      setCategoriasMonotributo([...categoriasTemp]);
-      setEditandoCategorias(false);
-      setShowMonotributoModal(false);
-
-      if (window.showToast) {
-        window.showToast('Categorías de monotributo actualizadas', 'success');
-      }
-    } catch (error) {
-      console.error('Error guardando categorías:', error);
-    }
-  };
-
-  const iniciarEdicionCategorias = () => {
-    setCategoriasTemp([...categoriasMonotributo]);
-    setEditandoCategorias(true);
-  };
-
-  const cancelarEdicionCategorias = () => {
-    setCategoriasTemp([]);
-    setEditandoCategorias(false);
-  };
-
-  const actualizarCategoriaTemp = (index, campo, valor) => {
-    const nuevasCategorias = [...categoriasTemp];
-    nuevasCategorias[index] = {
-      ...nuevasCategorias[index],
-      [campo]: parseInt(valor) || 0
+  const datosHistoricoCancelacionesParaGrafico = datosHistoricoCancelaciones.map(item => {
+    const fecha = new Date(item.mes);
+    return {
+      mes: fecha.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }),
+      mesCompleto: fecha.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }),
+      inasistencia: item.porcentaje_inasistencia_paciente,
+      asistencia: item.porcentaje_asistencia_paciente,
+      realizadas: item.realizadas,
+      canceladas_con_ant: item.canceladas_con_antelacion,
+      canceladas_sin_ant: item.canceladas_sin_antelacion,
+      canceladas_profesional: item.canceladas_por_profesional,
+      proyectadas: item.proyectadas || 0,
+      total_canceladas_paciente: item.total_canceladas_paciente,
+      total_validas: item.total_sesiones_validas,
+      total_programadas: item.total_sesiones_programadas,
+      tieneProyecciones: item.tiene_proyecciones
     };
-    setCategoriasTemp(nuevasCategorias);
-  };
-
-  // 🚀 CORREGIDO: Solo mostrar datos si hay datos reales
-  const datosGraficoComprensivo = datosGanancias.filter(item =>
-    item.ingresos_sesiones > 0 || item.gastos_totales > 0 || item.horas_trabajadas > 0
-  );
+  });
 
   // Colores para gráficos
   const COLORES = {
-    ganancia: '#10B981',
+    ganancia_positiva: '#10B981',
     ganancia_negativa: '#EF4444',
-    ingresos: '#3B82F6',
-    gastos: '#F59E0B',
     horas: '#8B5CF6',
-    facturado: '#059669',
-    no_facturado: '#6B7280',
-    cancelaciones: '#DC2626'
+    entradas: '#3B82F6',
+    salidas: '#F59E0B',
+    inasistencia: '#EF4444',
+    asistencia: '#10B981',
+    cancelada_profesional: '#6B7280'
   };
 
   if (loading) {
@@ -280,572 +260,624 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
     );
   }
 
-  // 🚀 CORREGIDO: Mostrar mensaje si no hay datos
-  if (datosGraficoComprensivo.length === 0) {
+  // Si no hay datos financieros
+  if (datosGrafico.length === 0) {
     return (
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
             <BarChart3 className="text-white" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-            <p className="text-gray-600">Análisis financiero y métricas de rendimiento</p>
+            <h1 className="text-2xl font-bold text-gray-800">Dashboard Financiero</h1>
+            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 21-9)</p>
           </div>
         </div>
 
-        {/* Mensaje de sin datos */}
         <div className="card p-12 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <BarChart3 className="text-gray-400" size={32} />
           </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Sin datos disponibles</h3>
+
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Sin datos financieros</h3>
           <p className="text-gray-600 mb-4">
-            El dashboard mostrará información cuando tengas:
+            El dashboard mostrará información cuando tengas entradas y salidas registradas
           </p>
-          <ul className="text-sm text-gray-500 space-y-1 max-w-md mx-auto">
-            <li>• Pagos recibidos registrados</li>
-            <li>• Pagos hechos (gastos) registrados</li>
-            <li>• Sesiones realizadas</li>
-          </ul>
-          <p className="text-xs text-gray-400 mt-4">
-            Los datos se calculan desde mayo 2025 en adelante
-          </p>
+
+          <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-4 max-w-md mx-auto">
+            <p className="font-medium mb-2">💡 Para ver el dashboard necesitas:</p>
+            <ul className="text-left space-y-1">
+              <li>• Pagos recibidos (entradas)</li>
+              <li>• Pagos hechos (salidas)</li>
+              <li>• Sesiones realizadas o canceladas sin antelación</li>
+            </ul>
+            <p className="text-xs text-gray-400 mt-3">
+              Los datos se agrupan por período del 21 al 9 del mes siguiente
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
-  const categoriaActual = determinarCategoriaMonotributo(monotributo.proyeccion_total || 0);
-  const proximaRecategorizacion = calcularProximaRecategorizacion();
-
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
-          <BarChart3 className="text-white" size={24} />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
+            <BarChart3 className="text-white" size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Dashboard Financiero</h1>
+            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 21-9)</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-          <p className="text-gray-600">Análisis financiero y métricas de rendimiento (desde mayo 2025)</p>
+
+        <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 rounded-lg border border-purple-200">
+          <DollarSign className="text-purple-600" size={16} />
+          <span className="text-sm font-medium text-purple-700">
+            Mostrando en {currencyMode}
+          </span>
         </div>
       </div>
 
       {/* Cards de métricas principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Promedio mensual */}
+        {/* Promedio horas por día laboral */}
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center">
-              <DollarSign className="text-white" size={24} />
+              <Clock className="text-white" size={24} />
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-gray-800">
-                {formatCurrency(metricas.promedio_ganancia_mensual || 0)}
+                {formatHours(metricas.promedioHorasPorDiaLaboral)}
               </div>
-              <div className="text-sm text-gray-500">
-                Promedio mensual ({metricas.meses_calculados || 0} meses)
-              </div>
+              <div className="text-sm text-gray-500">Por día laboral</div>
             </div>
           </div>
-          <div className="text-xs text-gray-500">Desde mayo 2025</div>
+          <div className="text-xs text-gray-500">Promedio de intensidad diaria</div>
         </div>
 
-        {/* Crecimiento ganancia */}
+        {/* Promedio de ganancia */}
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center">
-              {(metricas.crecimiento_ganancia_pct || 0) >= 0 ? (
-                <TrendingUp className="text-white" size={24} />
-              ) : (
-                <TrendingDown className="text-white" size={24} />
-              )}
+              <DollarSign className="text-white" size={24} />
             </div>
             <div className="text-right">
-              <div className={`text-2xl font-bold ${(metricas.crecimiento_ganancia_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {metricas.crecimiento_ganancia_pct ? `${metricas.crecimiento_ganancia_pct > 0 ? '+' : ''}${metricas.crecimiento_ganancia_pct}%` : 'N/A'}
+              <div className={`text-2xl font-bold ${metricas.promedioGanancia >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {currencyMode === 'USD'
+                  ? formatCurrency(metricas.promedioGanancia / (tipoCambio || 1150), 'USD')
+                  : formatCurrency(metricas.promedioGanancia, 'ARS')
+                }
               </div>
-              <div className="text-sm text-gray-500">
-                Crecimiento ganancia
-              </div>
+              <div className="text-sm text-gray-500">Promedio mensual</div>
             </div>
           </div>
-          <div className="text-xs text-gray-500">
-            {metricas.ultimo_mes && metricas.mes_anterior ?
-              `${formatearMesCorto(metricas.ultimo_mes)} vs ${formatearMesCorto(metricas.mes_anterior)}` :
-              'Sin datos suficientes'
-            }
-          </div>
+          <div className="text-xs text-gray-500">Ganancia neta promedio</div>
         </div>
 
-        {/* Crecimiento horas */}
+        {/* Promedio de horas */}
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
               <Clock className="text-white" size={24} />
             </div>
             <div className="text-right">
-              <div className={`text-2xl font-bold ${(metricas.crecimiento_horas_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {metricas.crecimiento_horas_pct ? `${metricas.crecimiento_horas_pct > 0 ? '+' : ''}${metricas.crecimiento_horas_pct}%` : 'N/A'}
+              <div className="text-2xl font-bold text-gray-800">
+                {formatHours(metricas.promedioHoras)}
               </div>
-              <div className="text-sm text-gray-500">
-                Crecimiento horas
-              </div>
+              <div className="text-sm text-gray-500">Promedio mensual</div>
             </div>
           </div>
-          <div className="text-xs text-gray-500">
-            {metricas.ultimo_mes && metricas.mes_anterior ?
-              `${formatearMesCorto(metricas.ultimo_mes)} vs ${formatearMesCorto(metricas.mes_anterior)}` :
-              'Sin datos suficientes'
-            }
-          </div>
+          <div className="text-xs text-gray-500">Horas trabajadas promedio</div>
         </div>
 
-        {/* Monotributo actual */}
+        {/* Mejor mes */}
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-700 rounded-xl flex items-center justify-center">
-              <Receipt className="text-white" size={24} />
+            <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-700 rounded-xl flex items-center justify-center">
+              <TrendingUp className="text-white" size={24} />
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-gray-800">
-                Cat. {categoriaActual.codigo}
-              </div>
-              <div className="text-sm text-gray-500">
-                {formatCurrency(monotributo.proyeccion_total || 0)}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-              Proyección período
-            </div>
-            <button
-              onClick={() => setShowMonotributoModal(true)}
-              className="text-orange-600 hover:text-orange-700 p-1"
-              title="Configurar categorías"
-            >
-              <Settings size={14} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Gráfico principal: Ganancias y Horas */}
-      {datosGraficoComprensivo.length > 0 && (
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-gray-800">Ganancias Mensuales y Horas Trabajadas</h3>
-            <div className="text-sm text-gray-500">Datos reales desde mayo 2025</div>
-          </div>
-
-          <ResponsiveContainer width="100%" height={400}>
-            <ComposedChart data={datosGraficoComprensivo}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis
-                dataKey="mesCorto"
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-              />
-              <YAxis
-                yAxisId="dinero"
-                orientation="left"
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickFormatter={(value) => formatCurrency(value).split(' ')[0]}
-              />
-              <YAxis
-                yAxisId="horas"
-                orientation="right"
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickFormatter={(value) => `${value}h`}
-              />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
-                        <p className="font-medium text-gray-800 mb-2">{data.mes}</p>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-green-600">Ganancia neta:</span>
-                            <span className="font-medium">{formatCurrency(data.ganancia_neta)}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-blue-600">Ingresos:</span>
-                            <span className="font-medium">{formatCurrency(data.ingresos_sesiones)}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-orange-600">Gastos:</span>
-                            <span className="font-medium">{formatCurrency(data.gastos_totales)}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-purple-600">Horas trabajadas:</span>
-                            <span className="font-medium">{data.horas_trabajadas}h</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Legend />
-              <Bar
-                yAxisId="dinero"
-                dataKey="ganancia_neta"
-                name="Ganancia Neta"
-                fill={COLORES.ganancia}
-                radius={[4, 4, 0, 0]}
-              />
-              <Line
-                yAxisId="horas"
-                type="monotone"
-                dataKey="horas_trabajadas"
-                name="Horas Trabajadas"
-                stroke={COLORES.horas}
-                strokeWidth={3}
-                dot={{ fill: COLORES.horas, strokeWidth: 2, r: 4 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Grid de gráficos secundarios */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfico de facturación */}
-        {datosFacturacion.length > 0 && (
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-gray-800">Facturación Mensual</h3>
-              <div className="text-sm text-gray-500">% Facturado vs No Facturado</div>
-            </div>
-
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={datosFacturacion}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis
-                  dataKey="mesCorto"
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${value}%`}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
-                          <p className="font-medium text-gray-800 mb-2">{data.mes}</p>
-                          <div className="space-y-1 text-sm">
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-green-600">Facturado:</span>
-                              <span className="font-medium">{data.porcentaje_facturado.toFixed(1)}% ({formatCurrency(data.monto_facturado)})</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-gray-600">No facturado:</span>
-                              <span className="font-medium">{data.porcentaje_no_facturado.toFixed(1)}% ({formatCurrency(data.monto_no_facturado)})</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-4 pt-1 border-t">
-                              <span className="text-gray-800">Total:</span>
-                              <span className="font-medium">{formatCurrency(data.monto_total)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar
-                  dataKey="porcentaje_facturado"
-                  stackId="facturacion"
-                  name="Facturado"
-                  fill={COLORES.facturado}
-                  radius={[0, 0, 0, 0]}
-                />
-                <Bar
-                  dataKey="porcentaje_no_facturado"
-                  stackId="facturacion"
-                  name="No Facturado"
-                  fill={COLORES.no_facturado}
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Gráfico de cancelaciones */}
-        {datosCancelaciones.length > 0 && (
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-gray-800">Cancelaciones por Paciente</h3>
-              <select
-                value={pacienteSeleccionado}
-                onChange={(e) => setPacienteSeleccionado(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="">Todos los pacientes</option>
-                {pacientesDisponibles.map(paciente => (
-                  <option key={paciente.id} value={paciente.nombre}>
-                    {paciente.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={obtenerDatosCancelacionesFiltrados()}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis
-                  dataKey="mesCorto"
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${value}%`}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
-                          <p className="font-medium text-gray-800 mb-2">{data.mes}</p>
-                          <p className="text-sm text-gray-600 mb-2">{data.paciente_nombre}</p>
-                          <div className="space-y-1 text-sm">
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-red-600">Canceladas:</span>
-                              <span className="font-medium">{data.sesiones_canceladas}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-gray-600">Total sesiones:</span>
-                              <span className="font-medium">{data.total_sesiones}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-gray-800">% Cancelación:</span>
-                              <span className="font-medium">{data.porcentaje_cancelacion}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar
-                  dataKey="porcentaje_cancelacion"
-                  name="% Cancelaciones"
-                  fill={COLORES.cancelaciones}
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
-
-      {/* Card de monotributo detallado */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-bold text-gray-800">Análisis de Monotributo</h3>
-          <div className="text-sm text-gray-500">Facturación y proyección por período</div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Situación actual */}
-          <div className="space-y-4">
-            <h4 className="font-medium text-gray-700">Situación Actual</h4>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Categoría actual:</span>
-                <span className="font-bold text-lg">Categoría {categoriaActual.codigo}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Facturado en período:</span>
-                <span className="font-medium">{formatCurrency(monotributo.facturado_12_meses || 0)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Límite actual:</span>
-                <span className="font-medium">{formatCurrency(categoriaActual.facturacion_maxima)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Utilización:</span>
-                <span className="font-medium">
-                  {categoriaActual.facturacion_maxima > 0 ?
-                    ((monotributo.facturado_12_meses || 0) / categoriaActual.facturacion_maxima * 100).toFixed(1) : 0
-                  }%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Proyección */}
-          <div className="space-y-4">
-            <h4 className="font-medium text-gray-700">Proyección hasta {proximaRecategorizacion.fecha}</h4>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Proyección total:</span>
-                <span className="font-medium">{formatCurrency(monotributo.proyeccion_total || 0)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Sesiones pendientes:</span>
-                <span className="font-medium">{monotributo.total_pendientes || 0} sesiones</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Valor pendiente:</span>
-                <span className="font-medium">{formatCurrency(monotributo.ingresos_pendientes || 0)}</span>
-              </div>
-              {monotributo.proyeccion_total > categoriaActual.facturacion_maxima && (
-                <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                  <AlertTriangle className="text-orange-600" size={16} />
-                  <span className="text-sm text-orange-700">
-                    Podrías necesitar recategorizar
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Modal de configuración de monotributo */}
-      {showMonotributoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-          <div className="modal-content max-w-4xl w-full mx-4 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-800">Categorías de Monotributo</h2>
-              <button onClick={() => setShowMonotributoModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-gray-600">Escalas vigentes de ARCA (actualizadas febrero 2025)</p>
-                {!editandoCategorias ? (
-                  <button
-                    onClick={iniciarEdicionCategorias}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    <Settings size={16} />
-                    Editar
-                  </button>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={guardarCategoriasMonotributo}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                    >
-                      <Save size={16} />
-                      Guardar
-                    </button>
-                    <button
-                      onClick={cancelarEdicionCategorias}
-                      className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                    >
-                      <X size={16} />
-                      Cancelar
-                    </button>
-                  </div>
+              <div className="text-2xl font-bold text-green-600">
+                {metricas.mejorMes && (currencyMode === 'USD'
+                  ? formatCurrency(metricas.mejorMes.ganancia_usd, 'USD')
+                  : formatCurrency(metricas.mejorMes.ganancia_ars, 'ARS')
                 )}
               </div>
+              <div className="text-sm text-gray-500">
+                {metricas.mejorMes?.mes || 'N/A'}
+              </div>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500">Mejor mes histórico</div>
+        </div>
+      </div>
+
+      {/* Gráfico principal */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-bold text-gray-800">
+            Evolución de Ganancias vs Horas Trabajadas
+          </h3>
+          <div className="text-sm text-gray-500">Período normalizado 21-9</div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={400}>
+          <ComposedChart data={datosGrafico} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+
+            <XAxis
+              dataKey="mes"
+              tick={{ fontSize: 12 }}
+              axisLine={false}
+            />
+
+            <YAxis
+              yAxisId="dinero"
+              orientation="left"
+              tick={{ fontSize: 12 }}
+              axisLine={false}
+              tickFormatter={(value) => {
+                if (currencyMode === 'USD') {
+                  return `${(value / tipoCambio).toFixed(0)}`;
+                }
+                return `${(value / 1000).toFixed(0)}k`;
+              }}
+            />
+
+            <YAxis
+              yAxisId="horas"
+              orientation="right"
+              tick={{ fontSize: 12 }}
+              axisLine={false}
+              tickFormatter={(value) => `${value}h`}
+            />
+
+            <Tooltip
+              content={({ active, payload, label }) => {
+                if (active && payload && payload.length) {
+                  const data = payload[0].payload;
+                  const gananciaKey = currencyMode === 'USD' ? 'ganancia_usd' : 'ganancia_ars';
+                  const entradasKey = currencyMode === 'USD' ? 'entradas_usd' : 'entradas_ars';
+                  const salidasKey = currencyMode === 'USD' ? 'salidas_usd' : 'salidas_ars';
+                  const gananciaXHoraKey = currencyMode === 'USD' ? 'ganancia_por_hora_usd' : 'ganancia_por_hora_ars';
+
+                  return (
+                    <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
+                      <p className="font-medium text-gray-800 mb-2">{data.mesCompleto}</p>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className={`${data.gananciaNegativa ? 'text-red-600' : 'text-green-600'}`}>
+                            Ganancia neta:
+                          </span>
+                          <span className="font-medium">
+                            {formatCurrency(data[gananciaKey], currencyMode)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-blue-600">Entradas:</span>
+                          <span className="font-medium">
+                            {formatCurrency(data[entradasKey], currencyMode)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-orange-600">Salidas:</span>
+                          <span className="font-medium">
+                            {formatCurrency(data[salidasKey], currencyMode)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-purple-600">Horas trabajadas:</span>
+                          <span className="font-medium">{formatHours(data.horas)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4 pt-1 border-t">
+                          <span className="text-gray-700">Ganancia/hora:</span>
+                          <span className="font-medium">
+                            {formatCurrency(data[gananciaXHoraKey], currencyMode)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+
+            <Legend />
+
+            <Bar
+              yAxisId="dinero"
+              dataKey={currencyMode === 'USD' ? 'ganancia_usd' : 'ganancia_ars'}
+              name={`Ganancia Neta (${currencyMode})`}
+              radius={[4, 4, 0, 0]}
+            >
+              {datosGrafico.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.gananciaNegativa ? COLORES.ganancia_negativa : COLORES.ganancia_positiva}
+                />
+              ))}
+            </Bar>
+
+            <Line
+              yAxisId="horas"
+              type="monotone"
+              dataKey="horas"
+              name="Horas Trabajadas"
+              stroke={COLORES.horas}
+              strokeWidth={3}
+              dot={{ fill: COLORES.horas, strokeWidth: 2, r: 4 }}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+
+        {/* Indicadores de ganancia por hora */}
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">
+            💰 Ganancia por Hora Trabajada
+          </h4>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {datosGrafico.map((item, index) => {
+              const gananciaXHora = currencyMode === 'USD'
+                ? item.ganancia_por_hora_usd
+                : item.ganancia_por_hora_ars;
+
+              return (
+                <div key={index} className="text-center p-2 bg-gray-50 rounded-lg">
+                  <div className="text-xs text-gray-600 mb-1">{item.mes}</div>
+                  <div className={`text-sm font-bold ${gananciaXHora >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {item.horas > 0
+                      ? formatCurrency(gananciaXHora, currencyMode)
+                      : 'Sin datos'
+                    }
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {formatHours(item.horas)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ANÁLISIS DE CANCELACIONES */}
+      {datosCancelaciones.length > 0 && (
+        <>
+          {/* Header cancelaciones */}
+          <div className="flex items-center justify-between mt-12">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center">
+                <UserX className="text-white" size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Análisis de Inasistencias</h2>
+                <p className="text-gray-600">Seguimiento de asistencia e inasistencias por paciente</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setVistaHistoricaCancelaciones(!vistaHistoricaCancelaciones)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${vistaHistoricaCancelaciones
+                  ? 'bg-purple-600 text-white hover:bg-purple-700'
+                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                }`}
+            >
+              <Calendar size={16} />
+              {vistaHistoricaCancelaciones ? 'Vista Actual' : 'Histórico'}
+            </button>
+          </div>
+
+          {/* Cards de métricas de cancelaciones */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center">
+                  <Users className="text-white" size={24} />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-800">
+                    {metricasCancelaciones.totalPacientes}
+                  </div>
+                  <div className="text-sm text-gray-500">Pacientes</div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">Con sesiones registradas</div>
+            </div>
+
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-700 rounded-xl flex items-center justify-center">
+                  <TrendingDown className="text-white" size={24} />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {metricasCancelaciones.promedioInasistencia}%
+                  </div>
+                  <div className="text-sm text-gray-500">Promedio</div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">Inasistencia pacientes</div>
+            </div>
+
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="text-white" size={24} />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-red-600">
+                    {metricasCancelaciones.pacienteMayorInasistencia?.porcentaje_inasistencia_paciente || 0}%
+                  </div>
+                  <div className="text-sm text-gray-500 truncate max-w-24">
+                    {metricasCancelaciones.pacienteMayorInasistencia?.paciente_nombre?.split(' ')[0] || 'N/A'}
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">Mayor inasistencia</div>
+            </div>
+
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center">
+                  <UserX className="text-white" size={24} />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-green-600">
+                    {metricasCancelaciones.pacienteMenorInasistencia?.porcentaje_inasistencia_paciente || 0}%
+                  </div>
+                  <div className="text-sm text-gray-500 truncate max-w-24">
+                    {metricasCancelaciones.pacienteMenorInasistencia?.paciente_nombre?.split(' ')[0] || 'N/A'}
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">Mejor asistencia</div>
+            </div>
+          </div>
+
+          {/* Gráfico de cancelaciones */}
+          <div className="card p-6">
+            {!vistaHistoricaCancelaciones ? (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-gray-800">
+                    Inasistencias por Paciente (Top 10)
+                  </h3>
+                  <div className="text-sm text-gray-500">% de inasistencias del paciente</div>
+                </div>
+
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={datosCancelacionesParaGrafico} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="nombre"
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      domain={[0, 100]}
+                      tickFormatter={(value) => `${value}%`}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
+                              <p className="font-medium text-gray-800 mb-2">{data.nombreCompleto}</p>
+                              <div className="space-y-1 text-sm">
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-red-600">% Inasistencia paciente:</span>
+                                  <span className="font-medium">{data.inasistencia}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-green-600">% Asistencia paciente:</span>
+                                  <span className="font-medium">{data.asistencia}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4 pt-1 border-t">
+                                  <span className="text-gray-600">Realizadas:</span>
+                                  <span className="font-medium">{data.realizadas}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-red-600">Cancel. con antelación:</span>
+                                  <span className="font-medium">{data.canceladas_con_ant}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-red-600">Cancel. sin antelación:</span>
+                                  <span className="font-medium">{data.canceladas_sin_ant}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-gray-500">Cancel. por profesional:</span>
+                                  <span className="font-medium">{data.canceladas_profesional}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4 pt-1 border-t">
+                                  <span className="text-gray-600">Total válidas:</span>
+                                  <span className="font-medium">{data.total_validas}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend />
+                    <Bar
+                      dataKey="inasistencia"
+                      name="% Inasistencia Paciente"
+                      radius={[4, 4, 0, 0]}
+                    >
+                      {datosCancelacionesParaGrafico.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-gray-800">
+                    Evolución Mensual de Inasistencias (Total)
+                  </h3>
+                  <div className="text-sm text-gray-500">
+                    {datosHistoricoCancelacionesParaGrafico.length} mes{datosHistoricoCancelacionesParaGrafico.length !== 1 ? 'es' : ''}
+                  </div>
+                </div>
+
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={datosHistoricoCancelacionesParaGrafico} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="mes"
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      domain={[0, 100]}
+                      tickFormatter={(value) => `${value}%`}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
+                              <p className="font-medium text-gray-800 mb-2">{data.mesCompleto}</p>
+                              <div className="space-y-1 text-sm">
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-red-600">% Inasistencia pacientes:</span>
+                                  <span className="font-medium">{data.inasistencia}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-green-600">% Asistencia pacientes:</span>
+                                  <span className="font-medium">{data.asistencia}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4 pt-1 border-t">
+                                  <span className="text-gray-600">Realizadas:</span>
+                                  <span className="font-medium">{data.realizadas}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-red-600">Cancel. con antelación:</span>
+                                  <span className="font-medium">{data.canceladas_con_ant}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-red-600">Cancel. sin antelación:</span>
+                                  <span className="font-medium">{data.canceladas_sin_ant}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-gray-500">Cancel. por profesional:</span>
+                                  <span className="font-medium">{data.canceladas_profesional}</span>
+                                </div>
+                                {data.proyectadas > 0 && (
+                                  <div className="flex items-center justify-between gap-4">
+                                    <span className="text-purple-600">Proyectadas:</span>
+                                    <span className="font-medium">{data.proyectadas}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between gap-4 pt-1 border-t">
+                                  <span className="text-gray-600">Total válidas:</span>
+                                  <span className="font-medium">{data.total_validas}</span>
+                                </div>
+                                {data.tieneProyecciones && (
+                                  <div className="text-xs text-purple-600 mt-2">
+                                    * Incluye proyección del mes actual
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend />
+                    <Bar
+                      dataKey="inasistencia"
+                      name="% Inasistencia Pacientes"
+                      fill={COLORES.inasistencia}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            )}
+          </div>
+
+          {/* Tabla resumen */}
+          {!vistaHistoricaCancelaciones && datosCancelaciones.length > 5 && (
+            <div className="card p-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Resumen de Asistencia</h3>
 
               <div className="overflow-x-auto">
-                <table className="w-full border border-gray-200 rounded-lg">
+                <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Cat.</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Facturación Mínima</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Facturación Máxima</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Cuota Servicios</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Cuota Bienes</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-700">Paciente</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">Realizadas</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">Inasist. Pac.</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">Cancel. Prof.</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">Total Válidas</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">% Inasist.</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">Estado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {(editandoCategorias ? categoriasTemp : categoriasMonotributo).map((categoria, index) => (
-                      <tr key={categoria.codigo} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-800">{categoria.codigo}</td>
-                        <td className="px-4 py-3">
-                          {editandoCategorias ? (
-                            <input
-                              type="number"
-                              value={categoria.facturacion_minima}
-                              onChange={(e) => actualizarCategoriaTemp(index, 'facturacion_minima', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
-                          ) : (
-                            formatCurrency(categoria.facturacion_minima)
-                          )}
+                    {datosCancelaciones.slice(0, 8).map((item, index) => (
+                      <tr key={item.paciente_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800">
+                          {item.paciente_nombre}
                         </td>
-                        <td className="px-4 py-3">
-                          {editandoCategorias ? (
-                            <input
-                              type="number"
-                              value={categoria.facturacion_maxima}
-                              onChange={(e) => actualizarCategoriaTemp(index, 'facturacion_maxima', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
-                          ) : (
-                            formatCurrency(categoria.facturacion_maxima)
-                          )}
+                        <td className="px-4 py-3 text-center text-green-600">
+                          {item.realizadas}
                         </td>
-                        <td className="px-4 py-3">
-                          {editandoCategorias ? (
-                            <input
-                              type="number"
-                              value={categoria.cuota_servicios}
-                              onChange={(e) => actualizarCategoriaTemp(index, 'cuota_servicios', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
-                          ) : (
-                            formatCurrency(categoria.cuota_servicios)
-                          )}
+                        <td className="px-4 py-3 text-center text-red-600">
+                          {item.total_canceladas_paciente}
                         </td>
-                        <td className="px-4 py-3">
-                          {editandoCategorias ? (
-                            <input
-                              type="number"
-                              value={categoria.cuota_bienes}
-                              onChange={(e) => actualizarCategoriaTemp(index, 'cuota_bienes', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
-                          ) : (
-                            formatCurrency(categoria.cuota_bienes)
-                          )}
+                        <td className="px-4 py-3 text-center text-gray-600">
+                          {item.canceladas_por_profesional}
+                        </td>
+                        <td className="px-4 py-3 text-center text-gray-600">
+                          {item.total_sesiones_validas}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`font-medium ${item.porcentaje_inasistencia_paciente > 30 ? 'text-red-600' :
+                              item.porcentaje_inasistencia_paciente > 15 ? 'text-orange-600' :
+                                'text-green-600'
+                            }`}>
+                            {item.porcentaje_inasistencia_paciente}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.porcentaje_inasistencia_paciente > 30 ? 'bg-red-100 text-red-700' :
+                              item.porcentaje_inasistencia_paciente > 15 ? 'bg-orange-100 text-orange-700' :
+                                'bg-green-100 text-green-700'
+                            }`}>
+                            {item.porcentaje_inasistencia_paciente > 30 ? 'Alto' :
+                              item.porcentaje_inasistencia_paciente > 15 ? 'Medio' : 'Bien'}
+                          </span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-2">Información importante</h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Las recategorizaciones son obligatorias en febrero y agosto</li>
-                  <li>• Se evalúa la facturación por período (no 12 meses móviles)</li>
-                  <li>• La próxima recategorización es en {proximaRecategorizacion.fecha}</li>
-                  <li>• Estas escalas están vigentes desde febrero 2025</li>
-                </ul>
-              </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );
