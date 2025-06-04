@@ -75,7 +75,8 @@ const BotonesCategorización = ({ sesion, onCategorizarSesion, onEditarSesion })
   ] : [
     { value: 'Cancelada con antelación', label: 'Con antelación', color: 'bg-orange-500' },
     { value: 'Cancelada sin antelación', label: 'Sin antelación', color: 'bg-red-500' },
-    { value: 'Cancelada por mí', label: 'Por mí', color: 'bg-gray-500' }
+    { value: 'Cancelada por mí', label: 'Por mí', color: 'bg-gray-500' },
+    { value: 'Cancelada por feriado', label: 'Por feriado', color: 'bg-blue-500' }
   ];
 
   return (

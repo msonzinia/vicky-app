@@ -134,7 +134,7 @@ const FacturarView = ({
 
       // Filtrar solo sesiones que generan cobro
       const sesionesCobro = (sesionesDetalle || []).filter(sesion =>
-        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada'].includes(sesion.estado)
+        !['Cancelada con antelación', 'Cancelada por mí', 'Cancelada', 'Cancelada por feriado'].includes(sesion.estado)
       );
 
       // Obtener nombre del tutor (solo primer nombre)

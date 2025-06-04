@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, XCircle, Clock, Calendar } from 'lucide-react';
 
 const CalendarioView = ({
   sesiones,
@@ -119,6 +119,10 @@ const CalendarioView = ({
     }
 
     if (sesion.estado.includes('Cancelada')) {
+      // Ícono específico para feriado
+      if (sesion.estado === 'Cancelada por feriado') {
+        return <Calendar size={12} className="text-white" />;
+      }
       return <XCircle size={12} className="text-white" />;
     }
 
@@ -158,6 +162,13 @@ const CalendarioView = ({
     }
 
     if (sesion.estado.includes('Cancelada')) {
+      // Borde azul para feriados
+      if (sesion.estado === 'Cancelada por feriado') {
+        return {
+          backgroundColor,
+          border: '2px solid #3b82f6' // Azul
+        };
+      }
       return {
         backgroundColor,
         border: '2px solid #ef4444' // Rojo

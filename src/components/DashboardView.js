@@ -201,7 +201,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
     return `${hours.toFixed(1)}h`;
   };
 
-  // Formatear datos de cancelaciones para gráficos
+  // 🚀 ACTUALIZADO: Formatear datos de cancelaciones para gráficos (CON FERIADOS)
   const datosCancelacionesParaGrafico = datosCancelaciones.slice(0, 10).map((item, index) => ({
     nombre: item.paciente_nombre.split(' ')[0], // Solo primer nombre
     nombreCompleto: item.paciente_nombre,
@@ -211,6 +211,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
     canceladas_con_ant: item.canceladas_con_antelacion,
     canceladas_sin_ant: item.canceladas_sin_antelacion,
     canceladas_profesional: item.canceladas_por_profesional,
+    canceladas_feriado: item.canceladas_por_feriado || 0, // 🚀 NUEVO
     total_canceladas_paciente: item.total_canceladas_paciente,
     total_validas: item.total_sesiones_validas,
     total_programadas: item.total_sesiones_programadas,
@@ -218,6 +219,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
       item.porcentaje_inasistencia_paciente > 15 ? '#F59E0B' : '#10B981'
   }));
 
+  // 🚀 ACTUALIZADO: Datos históricos con feriados
   const datosHistoricoCancelacionesParaGrafico = datosHistoricoCancelaciones.map(item => {
     const fecha = new Date(item.mes);
     return {
@@ -229,6 +231,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
       canceladas_con_ant: item.canceladas_con_antelacion,
       canceladas_sin_ant: item.canceladas_sin_antelacion,
       canceladas_profesional: item.canceladas_por_profesional,
+      canceladas_feriado: item.canceladas_por_feriado || 0, // 🚀 NUEVO
       proyectadas: item.proyectadas || 0,
       total_canceladas_paciente: item.total_canceladas_paciente,
       total_validas: item.total_sesiones_validas,
@@ -565,8 +568,8 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
             <button
               onClick={() => setVistaHistoricaCancelaciones(!vistaHistoricaCancelaciones)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${vistaHistoricaCancelaciones
-                  ? 'bg-purple-600 text-white hover:bg-purple-700'
-                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                ? 'bg-purple-600 text-white hover:bg-purple-700'
+                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                 }`}
             >
               <Calendar size={16} />
@@ -701,6 +704,13 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
                                   <span className="text-gray-500">Cancel. por profesional:</span>
                                   <span className="font-medium">{data.canceladas_profesional}</span>
                                 </div>
+                                {/* 🚀 NUEVO: Mostrar feriados separados */}
+                                {data.canceladas_feriado > 0 && (
+                                  <div className="flex items-center justify-between gap-4">
+                                    <span className="text-blue-600">Cancel. por feriado:</span>
+                                    <span className="font-medium">{data.canceladas_feriado}</span>
+                                  </div>
+                                )}
                                 <div className="flex items-center justify-between gap-4 pt-1 border-t">
                                   <span className="text-gray-600">Total válidas:</span>
                                   <span className="font-medium">{data.total_validas}</span>
@@ -782,6 +792,13 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
                                   <span className="text-gray-500">Cancel. por profesional:</span>
                                   <span className="font-medium">{data.canceladas_profesional}</span>
                                 </div>
+                                {/* 🚀 NUEVO: Mostrar feriados separados */}
+                                {data.canceladas_feriado > 0 && (
+                                  <div className="flex items-center justify-between gap-4">
+                                    <span className="text-blue-600">Cancel. por feriado:</span>
+                                    <span className="font-medium">{data.canceladas_feriado}</span>
+                                  </div>
+                                )}
                                 {data.proyectadas > 0 && (
                                   <div className="flex items-center justify-between gap-4">
                                     <span className="text-purple-600">Proyectadas:</span>
@@ -817,7 +834,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
             )}
           </div>
 
-          {/* Tabla resumen */}
+          {/* 🚀 ACTUALIZADA: Tabla resumen con feriados separados */}
           {!vistaHistoricaCancelaciones && datosCancelaciones.length > 5 && (
             <div className="card p-6">
               <h3 className="text-lg font-bold text-gray-800 mb-4">Resumen de Asistencia</h3>
@@ -830,6 +847,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
                       <th className="px-4 py-3 text-center font-medium text-gray-700">Realizadas</th>
                       <th className="px-4 py-3 text-center font-medium text-gray-700">Inasist. Pac.</th>
                       <th className="px-4 py-3 text-center font-medium text-gray-700">Cancel. Prof.</th>
+                      <th className="px-4 py-3 text-center font-medium text-gray-700">Cancel. Feriado</th>
                       <th className="px-4 py-3 text-center font-medium text-gray-700">Total Válidas</th>
                       <th className="px-4 py-3 text-center font-medium text-gray-700">% Inasist.</th>
                       <th className="px-4 py-3 text-center font-medium text-gray-700">Estado</th>
@@ -850,21 +868,24 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
                         <td className="px-4 py-3 text-center text-gray-600">
                           {item.canceladas_por_profesional}
                         </td>
+                        <td className="px-4 py-3 text-center text-blue-600">
+                          {item.canceladas_por_feriado || 0}
+                        </td>
                         <td className="px-4 py-3 text-center text-gray-600">
                           {item.total_sesiones_validas}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`font-medium ${item.porcentaje_inasistencia_paciente > 30 ? 'text-red-600' :
-                              item.porcentaje_inasistencia_paciente > 15 ? 'text-orange-600' :
-                                'text-green-600'
+                            item.porcentaje_inasistencia_paciente > 15 ? 'text-orange-600' :
+                              'text-green-600'
                             }`}>
                             {item.porcentaje_inasistencia_paciente}%
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.porcentaje_inasistencia_paciente > 30 ? 'bg-red-100 text-red-700' :
-                              item.porcentaje_inasistencia_paciente > 15 ? 'bg-orange-100 text-orange-700' :
-                                'bg-green-100 text-green-700'
+                            item.porcentaje_inasistencia_paciente > 15 ? 'bg-orange-100 text-orange-700' :
+                              'bg-green-100 text-green-700'
                             }`}>
                             {item.porcentaje_inasistencia_paciente > 30 ? 'Alto' :
                               item.porcentaje_inasistencia_paciente > 15 ? 'Medio' : 'Bien'}

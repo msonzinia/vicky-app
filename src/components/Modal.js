@@ -817,6 +817,8 @@ const Modal = ({
                       <option value="Cancelada con antelación">Cancelada con antelación</option>
                       <option value="Cancelada sin antelación">Cancelada sin antelación</option>
                       <option value="Cancelada por mí">Cancelada por mí</option>
+                      <option value="Cancelada por feriado">Cancelada por feriado</option>
+
                     </>
                   )}
                 </select>
@@ -846,11 +848,14 @@ const Modal = ({
                       )}
                     </div>
                   )}
-                  {(formData.estado === 'Cancelada con antelación' || formData.estado === 'Cancelada por mí' || formData.estado === 'Cancelada') && (
-                    <div className="text-gray-600">
-                      No se factura
-                    </div>
-                  )}
+                  {(formData.estado === 'Cancelada con antelación' ||
+                    formData.estado === 'Cancelada por mí' ||
+                    formData.estado === 'Cancelada' ||
+                    formData.estado === 'Cancelada por feriado') && (
+                      <div className="text-gray-600">
+                        No se factura
+                      </div>
+                    )}
                 </div>
               </div>
             </>

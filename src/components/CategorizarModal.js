@@ -236,18 +236,20 @@ const CategorizarModal = ({
                                 <option value="Cancelada con antelación">Cancelada con antelación</option>
                                 <option value="Cancelada sin antelación">Cancelada sin antelación</option>
                                 <option value="Cancelada por mí">Cancelada por mí</option>
+                                <option value="Cancelada por feriado">Cancelada por feriado</option>
+
                               </>
                             )}
                           </select>
 
                           {/* Indicador de facturación */}
                           <div className="text-xs mt-1">
-                            {(sessionStates[sesion.id] === 'Realizada' || sessionStates[sesion.id] === 'Cancelada sin antelación') && (
-                              <span className="text-green-600 font-medium">✓ Se factura</span>
-                            )}
-                            {(sessionStates[sesion.id] === 'Cancelada con antelación' || sessionStates[sesion.id] === 'Cancelada por mí' || sessionStates[sesion.id] === 'Cancelada') && (
-                              <span className="text-gray-600">✗ No se factura</span>
-                            )}
+                            {(sessionStates[sesion.id] === 'Cancelada con antelación' ||
+                              sessionStates[sesion.id] === 'Cancelada por mí' ||
+                              sessionStates[sesion.id] === 'Cancelada' ||
+                              sessionStates[sesion.id] === 'Cancelada por feriado') && (
+                                <span className="text-gray-600">✗ No se factura</span>
+                              )}
                             {sessionStates[sesion.id] === 'Pendiente' && (
                               <span className="text-orange-600">⏳ Sin categorizar</span>
                             )}
