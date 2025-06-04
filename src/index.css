@@ -914,3 +914,137 @@ select:focus {
 .sidebar-fixed .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
 }
+
+/* ============================================================================
+   🎌 ESTILOS ADICIONALES PARA FERIADOS Y SINCRONIZACIÓN
+   ============================================================================ */
+
+/* Día feriado - fondo especial */
+.calendar-day-improved.feriado-day {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border: 2px solid #3b82f6;
+  position: relative;
+}
+
+/* Día feriado que también es hoy */
+.calendar-day-improved.feriado-day.today {
+  background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 50%, #dbeafe 100%);
+  border: 2px solid #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+}
+
+/* Día feriado de otro mes */
+.calendar-day-improved.feriado-day.other-month {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  border: 1px solid #94a3b8;
+  opacity: 0.7;
+}
+
+/* Sesiones en días feriados - estilo especial */
+.calendar-day-improved.feriado-day .session-item {
+  border-left: 3px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Sesiones canceladas por feriado */
+.session-item[title*="Cancelada por feriado"] {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+  border: 2px solid #3b82f6 !important;
+  opacity: 0.8;
+  color: #1e40af !important;
+}
+
+/* Efecto hover mejorado para días feriados */
+.calendar-day-improved.feriado-day:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);
+  z-index: 5;
+}
+
+/* Animación sutil para indicador de feriado */
+.feriado-day .day-number span[title] {
+  animation: bounce-gentle 3s infinite;
+}
+
+@keyframes bounce-gentle {
+
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(-2px);
+  }
+
+  60% {
+    transform: translateY(-1px);
+  }
+}
+
+/* Estados de sincronización */
+.sync-button-syncing {
+  animation: pulse-sync 1.5s infinite;
+}
+
+@keyframes pulse-sync {
+
+  0%,
+  100% {
+    background-color: #3b82f6;
+  }
+
+  50% {
+    background-color: #60a5fa;
+  }
+}
+
+/* Mejoras para botones de feriado */
+.calendar-day-improved button {
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-day-improved button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+
+/* Notificaciones de sincronización */
+.sync-notification {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 1px solid #047857;
+  animation: slideInFromTop 0.5s ease-out;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive para mobile */
+@media (max-width: 768px) {
+  .calendar-day-improved.feriado-day button {
+    font-size: 8px;
+    padding: 1px 2px;
+  }
+
+  .calendar-day-improved.feriado-day .day-number span {
+    font-size: 8px;
+    padding: 1px 2px;
+  }
+}

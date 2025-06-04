@@ -950,7 +950,13 @@ function App() {
     }
   }, [isMobile, activeView]);
 
-
+  // 🚀 NUEVO: Exponer Supabase para feriados y sincronización
+  useEffect(() => {
+    window.supabase = supabase;
+    return () => {
+      delete window.supabase;
+    };
+  }, []);
 
 
   useEffect(() => {
