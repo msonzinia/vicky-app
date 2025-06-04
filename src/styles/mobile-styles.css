@@ -1,0 +1,150 @@
+/* Animaciones para mobile */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Ajuste para el contenido cuando hay bottom navigation */
+@media (max-width: 768px) {
+  .main-content-adjusted {
+    padding-bottom: 80px !important;
+    /* Espacio para el bottom navigation */
+  }
+
+  /* Asegurar que el bottom navigation esté siempre visible */
+  .lg\:hidden.fixed.bottom-0 {
+    z-index: 1000;
+  }
+
+  /* Mejorar el scroll en mobile */
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Estilos para botones táctiles más grandes */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Reducir márgenes en mobile */
+  .space-y-4>*+* {
+    margin-top: 1rem !important;
+  }
+
+  /* Mejor visibilidad de focus en mobile */
+  .focus\:ring-2:focus {
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.4);
+  }
+}
+
+/* Ripple effect para botones */
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.ripple-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-effect::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.ripple-effect:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Mejoras para inputs en mobile */
+@media (max-width: 768px) {
+
+  input[type="text"],
+  input[type="number"],
+  input[type="datetime-local"],
+  select,
+  textarea {
+    font-size: 16px;
+    /* Previene zoom en iOS */
+  }
+}
+
+/* Gradient para bottom navigation */
+.bottom-nav-gradient {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.1) 0%, transparent 100%);
+}
+
+/* Safe area para dispositivos con notch */
+@supports (padding: max(0px)) {
+  .safe-area-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================================================
+   OPCIÓN 2A: IMPORTAR EN src/index.css (SI CREASTE EL ARCHIVO ARRIBA)
+   ============================================================================ */
+
+/* Si elegiste crear el archivo separado arriba, BUSCA tu archivo src/index.css
+   y AGREGA esta línea AL FINAL del archivo: */
+
+@import './styles/mobile-styles.css';
+
+/* ============================================================================
+   OPCIÓN 2B: PEGAR DIRECTAMENTE EN src/index.css (MÁS FÁCIL)
+   ============================================================================ */
+
+/* Si prefieres NO crear un archivo separado:
+   1. Ve a tu archivo src/index.css
+   2. Ve al FINAL del archivo
+   3. PEGA TODO el código CSS de arriba AL FINAL
+
+   Es decir, abres src/index.css y al final pegas desde:
+   "/* Animaciones para mobile */
+" 
+ hasta "/* Safe area para dispositivos con notch */"
+*/
+/* ============================================================================
+   PASO ADICIONAL: VERIFICAR QUE MAIN-CONTENT TENGA EL PADDING
+   ============================================================================ */
+
+/* BUSCA en tu CSS (puede estar en index.css o en cualquier archivo CSS) 
+   una clase que se llame "main-content-adjusted" o algo similar.
+   
+   Si NO LA ENCUENTRAS, agrega esto TAMBIÉN al final de tu CSS: */
+
+.main-content-adjusted {
+  padding-bottom: 20px;
+  /* Valor por defecto */
+}
+
+/* Esto es importante para que en mobile haya espacio para el footer */
+@media (max-width: 768px) {
+  .main-content-adjusted {
+    padding-bottom: 80px !important;
+  }
+}

@@ -21,7 +21,9 @@ import ToastSystem from './components/ToastSystem';
 
 // 🚀 NUEVO: Componentes mobile
 import { useIsMobile, MobileHeader, CalendarioMobile, SidebarOverlay } from './components/MobileComponents';
-
+import { EntradasMobile, SalidasMobile, DashboardMobile } from './components/MobileViews';
+import BottomNavigation from './components/BottomNavigation';
+import MobileModal from './components/MobileModal';
 // ============================================================================
 // 🚀 FUNCIONES JS QUE REEMPLAZAN LAS FUNCIONES DE SUPABASE
 // ============================================================================
@@ -549,7 +551,9 @@ function App() {
   // 🚀 NUEVO: Estados para mobile
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState(Date.now());
+  const [mobileModalOpen, setMobileModalOpen] = useState(false);
   const isMobile = useIsMobile();
+
 
   // Estados para modal de confirmación
   const [showConfirmacionModal, setShowConfirmacionModal] = useState(false);
@@ -1728,6 +1732,16 @@ function App() {
     }
   };
 
+  const handleNuevaSesionMobile = () => {
+    setMobileModalOpen(true);
+  };
+
+  const handleMobileSave = async (formData) => {
+    await handleModalSave(formData);
+    setMobileModalOpen(false);
+  };
+
+
   const handleCategorizacionMasiva = async (cambios) => {
     try {
       for (const cambio of cambios) {
@@ -1791,6 +1805,48 @@ function App() {
   };
 
   const renderCurrentView = () => {
+    // Para mobile, usar vistas específicas
+    if (isMobile) {
+      switch (activeView) {
+        case 'entradas':
+          return (
+            <EntradasMobile
+              sesiones={sesiones}
+              pacientes={pacientes}
+              formatCurrency={formatCurrency}
+              currencyMode={currencyMode}
+              tipoCambio={tipoCambio}
+            />
+          );
+        case 'salidas':
+          return (
+            <SalidasMobile
+              sesiones={sesiones}
+              supervisoras={supervisoras}
+              alquilerConfig={alquilerConfig}
+              formatCurrency={formatCurrency}
+            />
+          );
+        case 'dashboard':
+          return (
+            <DashboardMobile
+              sesiones={sesiones}
+              pacientes={pacientes}
+              supervisoras={supervisoras}
+              alquilerConfig={alquilerConfig}
+              formatCurrency={formatCurrency}
+            />
+          );
+        case 'calendario':
+          // El calendario mobile se maneja por separado más abajo
+          return null;
+        default:
+          // Para otras vistas, usar las vistas desktop normales
+          break;
+      }
+    }
+
+    // Vistas desktop normales (CÓDIGO EXISTENTE - NO CAMBIAR)
     switch (activeView) {
       case 'dashboard':
         return (
@@ -1943,6 +1999,7 @@ function App() {
             sesionsPendientes={sesionsPendientes}
             formatCurrency={formatCurrency}
             onCategorizarSesiones={() => openModal('categorizar-sesiones')}
+            onNuevaSesion={handleNuevaSesionMobile}  // ← NUEVA línea
           />
         )}
 
@@ -2030,8 +2087,40 @@ function App() {
       />
 
       <ToastSystem />
+      {/* Bottom Navigation para mobile */}
+      {isMobile && (
+        <BottomNavigation
+          activeView={activeView}
+          setActiveView={setActiveView}
+          sesionsPendientes={sesionsPendientes}
+        />
+      )}
+
+      {/* 🚀 NUEVO: Modal Mobile para agregar sesiones */}
+      <MobileModal
+        isOpen={mobileModalOpen}
+        onClose={() => setMobileModalOpen(false)}
+        pacientes={pacientes}
+        supervisoras={supervisoras}
+        onSave={handleMobileSave}
+        fechaPrecargada={fechaPrecargada}
+      />
+
+      <ToastSystem />
+
+
+
+      {/* 🚀 NUEVO: Modal Mobile para agregar sesiones */}
+      <MobileModal
+        isOpen={mobileModalOpen}
+        onClose={() => setMobileModalOpen(false)}
+        pacientes={pacientes}
+        supervisoras={supervisoras}
+        onSave={handleMobileSave}
+        fechaPrecargada={fechaPrecargada}
+      />
     </div>
   );
-}
+};
 
 export default App;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Edit3 } from 'lucide-react';
+import { Menu, X, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Edit3, Plus } from 'lucide-react';
 
 // 🚀 Hook para detectar mobile
 export const useIsMobile = () => {
@@ -18,13 +18,14 @@ export const useIsMobile = () => {
   return isMobile;
 };
 
-// 🚀 Header Mobile con mes agregado
+// 🚀 Header Mobile con mes agregado Y BOTÓN + NUEVO
 export const MobileHeader = ({
   onToggleSidebar,
   gananciaNeta,
   sesionsPendientes,
   formatCurrency,
-  onCategorizarSesiones
+  onCategorizarSesiones,
+  onNuevaSesion
 }) => {
   // Obtener el mes actual
   const mesActual = new Date().toLocaleDateString('es-AR', { month: 'long' });
@@ -33,13 +34,13 @@ export const MobileHeader = ({
   return (
     <div className="lg:hidden bg-gradient-to-r from-purple-600 to-purple-800 text-white p-4 sticky top-0 z-50">
       <div className="flex items-center justify-between">
-        {/* Menú hamburguesa */}
-        <button
-          onClick={onToggleSidebar}
-          className="p-3 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
-        >
-          <Menu size={20} />
-        </button>
+        {/* Logo/Título en lugar del menú hamburguesa */}
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center font-bold text-lg">
+            JEL
+          </div>
+          <div className="font-bold text-sm">Organizador</div>
+        </div>
 
         {/* Proyección del mes - PROMINENTE con mes */}
         <div className="flex-1 text-center">
@@ -49,16 +50,14 @@ export const MobileHeader = ({
           </div>
         </div>
 
-        {/* Botón de categorizar si hay pendientes */}
-        {sesionsPendientes > 0 && (
-          <button
-            onClick={onCategorizarSesiones}
-            className="p-3 rounded-lg bg-orange-500 hover:bg-orange-600 transition-colors flex items-center gap-2"
-          >
-            <AlertTriangle size={18} />
-            <span className="text-sm font-bold">{sesionsPendientes}</span>
-          </button>
-        )}
+        {/* Botón para agregar nueva sesión */}
+        <button
+          onClick={onNuevaSesion}
+          className="p-3 rounded-lg bg-green-500 hover:bg-green-600 transition-colors shadow-lg"
+          title="Agregar nueva sesión"
+        >
+          <Plus size={20} />
+        </button>
       </div>
     </div>
   );
@@ -272,7 +271,6 @@ export const CalendarioMobile = ({
     }
   };
 
-  // Obtener sesiones del día actual
   // Función auxiliar para comparar fechas en hora local (ignora hora/min/seg)
   const getFechaLocal = (fecha) => {
     return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
@@ -301,24 +299,27 @@ export const CalendarioMobile = ({
 
   return (
     <div className="space-y-4 max-w-md mx-auto">
-      {/* ADVERTENCIA PRINCIPAL - MÁS COMPACTA */}
+      {/* ADVERTENCIA PRINCIPAL - MEJORADA */}
       {sesionesPendientesGlobales.length > 0 && (
         <button
           onClick={() => setShowPendientesModal(true)}
-          className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white p-3 rounded-xl shadow-lg hover:from-red-600 hover:to-red-700 transition-all"
+          className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white p-4 rounded-xl shadow-lg hover:from-red-600 hover:to-red-700 transition-all"
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="bg-white/20 rounded-full p-1">
-                <AlertTriangle size={20} />
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 rounded-full p-2">
+                <AlertTriangle size={24} />
               </div>
               <div className="text-left">
-                <div className="font-bold text-sm">
+                <div className="font-bold text-lg">
                   ⚠️ {sesionesPendientesGlobales.length} SIN CATEGORIZAR
+                </div>
+                <div className="text-red-100 text-sm">
+                  Toca para categorizar rápidamente
                 </div>
               </div>
             </div>
-            <div className="text-2xl">👆</div>
+            <div className="text-3xl animate-bounce">👆</div>
           </div>
         </button>
       )}
