@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabase';
 
 // Componentes existentes
+import LoginForm from './components/LoginForm';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import CalendarioView from './components/CalendarioView';
@@ -531,6 +532,10 @@ const actualizarNombrePacienteEnSesiones = async (pacienteId, nuevoNombre) => {
 // ============================================================================
 
 function App() {
+  // 🚀 NUEVO: Estados de autenticación
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   // Estados principales
   const [activeView, setActiveView] = useState('calendario');
   const [showModal, setShowModal] = useState(false);
@@ -943,6 +948,37 @@ function App() {
       delete window.diagnosticarZonaHoraria;
     };
   }, [diagnosticarFechasEnSesiones, diagnosticarZonaHoraria]);
+
+
+  // 🚀 NUEVO: Verificar autenticación al cargar
+  useEffect(() => {
+    console.log('🔐 Verificando autenticación...');
+
+    // Verificar si ya hay una sesión activa
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+      console.log('👤 Usuario actual:', session?.user?.email || 'No autenticado');
+    });
+
+    // Escuchar cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('🔄 Cambio de autenticación:', event, session?.user?.email);
+        setUser(session?.user ?? null);
+        setAuthLoading(false);
+
+        // Solo recargar si se desloguea, NO si se loguea
+        if (event === 'SIGNED_OUT') {
+          console.log('👋 Logout, recargando app...');
+          window.location.reload();
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -1934,6 +1970,25 @@ function App() {
     }
   };
 
+  // 🚀 NUEVO: Verificar autenticación primero
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-purple-50">
+        <div className="text-center p-8">
+          <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-6"></div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Verificando acceso...</h1>
+          <p className="text-gray-600">Cargando autenticación segura</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 NUEVO: Si no hay usuario logueado, mostrar login
+  if (!user) {
+    return <LoginForm />;
+  }
+
+  // 🚀 MANTENER: Loading normal de la app (el que ya tenías)
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-purple-50">
@@ -1956,7 +2011,7 @@ function App() {
             <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-6"></div>
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">JEL Organizador</h1>
-          <p className="text-lg text-purple-600 font-medium mb-4">Cargando sistema...</p>
+          <p className="text-lg text-purple-600 font-medium mb-4">Cargando sistema de Victoria...</p>
           <p className="text-sm text-gray-500">Preparando sesiones, pacientes y facturación</p>
           <div className="w-64 h-2 bg-gray-200 rounded-full mx-auto mt-6 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-purple-500 to-purple-700 rounded-full animate-pulse"></div>
