@@ -552,6 +552,8 @@ function App() {
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState(Date.now());
   const [mobileModalOpen, setMobileModalOpen] = useState(false);
+  const [fechaDelCalendario, setFechaDelCalendario] = useState(new Date().toISOString().slice(0, 16));
+
   const isMobile = useIsMobile();
 
 
@@ -2024,6 +2026,7 @@ function App() {
               onCategorizarSesion={handleCategorizarSesionRapida}
               formatCurrency={formatCurrency}
               onCategorizarSesiones={() => openModal('categorizar-sesiones')}
+              onFechaChange={setFechaDelCalendario}
             />
           ) : (
             renderCurrentView()
@@ -2103,7 +2106,7 @@ function App() {
         pacientes={pacientes}
         supervisoras={supervisoras}
         onSave={handleMobileSave}
-        fechaPrecargada={fechaPrecargada}
+        fechaPrecargada={fechaDelCalendario}
       />
 
       <ToastSystem />

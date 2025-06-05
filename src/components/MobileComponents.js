@@ -18,7 +18,7 @@ export const useIsMobile = () => {
   return isMobile;
 };
 
-// 🚀 Header Mobile con mes agregado Y BOTÓN + NUEVO
+// 🚀 Header Mobile con logo jel3.png
 export const MobileHeader = ({
   onToggleSidebar,
   gananciaNeta,
@@ -34,16 +34,23 @@ export const MobileHeader = ({
   return (
     <div className="lg:hidden bg-gradient-to-r from-purple-600 to-purple-800 text-white p-4 sticky top-0 z-50">
       <div className="flex items-center justify-between">
-        {/* Logo/Título en lugar del menú hamburguesa */}
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center font-bold text-lg">
-            JEL
-          </div>
-          <div className="font-bold text-sm">Organizador</div>
+        {/* Logo solo */}
+        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
+          <img
+            src="/jel3.png"
+            alt="JEL Logo"
+            className="w-8 h-8 object-contain"
+            onError={(e) => {
+              // Fallback si no encuentra la imagen
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          <div className="hidden font-bold text-lg">JEL</div>
         </div>
 
-        {/* Proyección del mes - PROMINENTE con mes */}
-        <div className="flex-1 text-center">
+        {/* Proyección del mes - CENTRADO */}
+        <div className="flex-1 text-center mx-4">
           <div className="text-xs text-purple-200">Ganancia {mesCapitalizado}</div>
           <div className={`text-xl font-bold ${gananciaNeta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
             {formatCurrency(gananciaNeta)}
@@ -230,7 +237,7 @@ const SesionesPendientesModal = ({
   );
 };
 
-// 🚀 Calendario específico para Mobile - Vista por día MEJORADA
+// 🚀 Calendario específico para Mobile - Vista por día MEJORADA Y COMPACTA
 export const CalendarioMobile = ({
   sesiones,
   pacientes,
@@ -238,11 +245,26 @@ export const CalendarioMobile = ({
   onEditarSesion,
   onCategorizarSesion,
   formatCurrency,
-  onCategorizarSesiones
+  onCategorizarSesiones,
+  onFechaChange // Nueva prop para comunicar la fecha actual
 }) => {
   const [fechaActual, setFechaActual] = useState(new Date());
   const [showPendientesModal, setShowPendientesModal] = useState(false);
   const hoy = new Date();
+
+  // Comunicar la fecha actual al componente padre
+  React.useEffect(() => {
+    if (onFechaChange) {
+      const fechaFormateada = new Date(
+        fechaActual.getFullYear(),
+        fechaActual.getMonth(),
+        fechaActual.getDate(),
+        new Date().getHours(),
+        0
+      ).toISOString().slice(0, 16);
+      onFechaChange(fechaFormateada);
+    }
+  }, [fechaActual, onFechaChange]);
 
   // Funciones helper para el calendario
   const getPacienteById = (id) => pacientes.find(p => p.id === id);
@@ -298,7 +320,7 @@ export const CalendarioMobile = ({
   const esHoy = fechaActual.toDateString() === hoy.toDateString();
 
   return (
-    <div className="space-y-4 max-w-md mx-auto">
+    <div className="space-y-4 max-w-md mx-auto pb-20">
       {/* ADVERTENCIA PRINCIPAL - MEJORADA */}
       {sesionesPendientesGlobales.length > 0 && (
         <button
@@ -324,29 +346,28 @@ export const CalendarioMobile = ({
         </button>
       )}
 
-      {/* Navegación por día - MÁS COMPACTA */}
-      <div className="bg-white rounded-xl p-3 shadow-lg border border-gray-100">
-        <div className="flex items-center justify-between mb-3">
+      {/* Navegación por día - MÁS COMPACTA Y REDUCIDA */}
+      <div className="bg-white rounded-xl p-2 shadow-lg border border-gray-100">
+        <div className="flex items-center justify-between mb-2">
           <button
             onClick={() => {
               const ayer = new Date(fechaActual);
               ayer.setDate(fechaActual.getDate() - 1);
               setFechaActual(ayer);
             }}
-            className="p-2 rounded-xl bg-purple-100 hover:bg-purple-200 transition-colors"
+            className="p-2 rounded-lg bg-purple-100 hover:bg-purple-200 transition-colors"
           >
-            <ChevronLeft size={20} className="text-purple-600" />
+            <ChevronLeft size={18} className="text-purple-600" />
           </button>
 
-          <div className="text-center">
-            <h3 className={`text-lg font-bold ${esHoy ? 'text-purple-700' : 'text-gray-800'}`}>
-              {esHoy ? '🎯 HOY' : fechaActual.toLocaleDateString('es-AR', { weekday: 'long' })}
+          <div className="text-center flex-1">
+            <h3 className={`text-base font-bold ${esHoy ? 'text-purple-700' : 'text-gray-800'}`}>
+              {esHoy ? '🎯 HOY' : fechaActual.toLocaleDateString('es-AR', { weekday: 'short' })}
             </h3>
-            <p className="text-xs text-gray-600 font-medium">
+            <p className="text-[10px] text-gray-600 font-medium leading-tight">
               {fechaActual.toLocaleDateString('es-AR', {
                 day: 'numeric',
-                month: 'long',
-                year: 'numeric'
+                month: 'short'
               })}
             </p>
           </div>
@@ -357,18 +378,18 @@ export const CalendarioMobile = ({
               mañana.setDate(fechaActual.getDate() + 1);
               setFechaActual(mañana);
             }}
-            className="p-2 rounded-xl bg-purple-100 hover:bg-purple-200 transition-colors"
+            className="p-2 rounded-lg bg-purple-100 hover:bg-purple-200 transition-colors"
           >
-            <ChevronRight size={20} className="text-purple-600" />
+            <ChevronRight size={18} className="text-purple-600" />
           </button>
         </div>
 
-        {/* Botón "ir a hoy" si no estamos en hoy */}
+        {/* Botón "ir a hoy" si no estamos en hoy - MÁS PEQUEÑO */}
         {!esHoy && (
           <div className="text-center">
             <button
               onClick={() => setFechaActual(new Date())}
-              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg"
+              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1 rounded-lg text-xs font-bold hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg"
             >
               🎯 IR A HOY
             </button>

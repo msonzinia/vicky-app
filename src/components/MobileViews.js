@@ -51,7 +51,7 @@ export const EntradasMobile = ({
   const nombreMes = mesActual.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="space-y-6 max-w-md mx-auto pb-24">
+    <div className="space-y-6 max-w-md mx-auto pb-20">
       {/* Header */}
       <div className="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
         <div className="flex items-center gap-3 mb-4">
@@ -189,7 +189,7 @@ export const SalidasMobile = ({
   const nombreMes = mesActual.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="space-y-6 max-w-md mx-auto pb-24">
+    <div className="space-y-6 max-w-md mx-auto pb-20">
       {/* Header */}
       <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl p-6 shadow-lg">
         <div className="flex items-center gap-3 mb-4">
@@ -353,7 +353,7 @@ export const DashboardMobile = ({
   const nombreMes = mesActual.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="space-y-6 max-w-md mx-auto pb-24">
+    <div className="space-y-6 max-w-md mx-auto pb-20">
       {/* Header principal */}
       <div className={`bg-gradient-to-r ${datos.gananciaNeta >= 0 ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'} text-white rounded-xl p-6 shadow-lg`}>
         <div className="flex items-center gap-3 mb-4">

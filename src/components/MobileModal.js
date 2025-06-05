@@ -246,7 +246,7 @@ const MobileModal = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+        <div className="p-6 space-y-6 overflow-y-auto pb-20" style={{ maxHeight: 'calc(90vh - 140px)' }}>
 
           {/* STEP 1: Tipo de sesión */}
           {currentStep === 1 && (
@@ -266,8 +266,8 @@ const MobileModal = ({
                     key={tipo.value}
                     onClick={() => handleInputChange('tipo_sesion', tipo.value)}
                     className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${formData.tipo_sesion === tipo.value
-                        ? 'border-purple-500 bg-purple-50 shadow-lg scale-[1.02]'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-purple-500 bg-purple-50 shadow-lg scale-[1.02]'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                   >
                     <div className="flex items-center gap-3">
@@ -301,8 +301,8 @@ const MobileModal = ({
                       key={supervisora.id}
                       onClick={() => handleInputChange('supervisora_id', supervisora.id)}
                       className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 ${formData.supervisora_id === supervisora.id
-                          ? 'border-purple-500 bg-purple-50 shadow-lg'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        ? 'border-purple-500 bg-purple-50 shadow-lg'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                     >
                       <div className="flex items-center gap-3">
@@ -322,8 +322,8 @@ const MobileModal = ({
                       key={paciente.id}
                       onClick={() => handleInputChange('paciente_id', paciente.id)}
                       className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 ${formData.paciente_id === paciente.id
-                          ? 'border-purple-500 bg-purple-50 shadow-lg'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        ? 'border-purple-500 bg-purple-50 shadow-lg'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                     >
                       <div className="flex items-center gap-3">
@@ -442,8 +442,8 @@ const MobileModal = ({
                           key={supervisora.id}
                           onClick={() => handleInputChange('supervisora_acompanante_id', supervisora.id)}
                           className={`w-full p-3 rounded-lg border text-left transition-colors ${formData.supervisora_acompanante_id === supervisora.id
-                              ? 'border-purple-500 bg-purple-100'
-                              : 'border-gray-200 hover:border-gray-300'
+                            ? 'border-purple-500 bg-purple-100'
+                            : 'border-gray-200 hover:border-gray-300'
                             }`}
                         >
                           <div className="font-medium text-gray-800">{supervisora.nombre_apellido}</div>
