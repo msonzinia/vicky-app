@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Save, X, UserCog, User, GraduationCap, Heart, CreditCard, BarChart3 } from 'lucide-react';
+import { Calendar, Users, UserCheck, Home, ArrowDownToLine, ArrowUpFromLine, Receipt, Camera, Save, X, UserCog, User, GraduationCap, Heart, CreditCard, BarChart3, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const Sidebar = ({
@@ -56,6 +56,56 @@ const Sidebar = ({
       montoEstimado: 0
     }
   });
+
+  // 🚀 Estados para visibilidad de montos
+  const [isVisible, setIsVisible] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Cargar configuración inicial del localStorage para visibilidad
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem('moneyVisibility');
+    if (savedVisibility !== null) {
+      setIsVisible(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Función para toggle con animación
+  const toggleVisibility = () => {
+    setIsAnimating(true);
+
+    setTimeout(() => {
+      const newVisibility = !isVisible;
+      setIsVisible(newVisibility);
+      localStorage.setItem('moneyVisibility', JSON.stringify(newVisibility));
+      setIsAnimating(false);
+    }, 150);
+  };
+
+  // Función para formatear montos (mostrar o ocultar)
+  const formatVisibleAmount = (amount, formatCurrency) => {
+    if (isVisible) {
+      return formatCurrency(amount);
+    }
+
+    const formattedAmount = formatCurrency(amount);
+    const currencySymbol = formattedAmount.match(/[A-Z]{3}|\$/) || '';
+    const length = formattedAmount.replace(/[^\d]/g, '').length;
+    const hiddenAmount = '*'.repeat(Math.min(length, 6));
+
+    if (formattedAmount.includes('USD')) {
+      return `${hiddenAmount} USD`;
+    } else {
+      return `${hiddenAmount} ARS`;
+    }
+  };
+
+  // Función para ocultar números simples
+  const formatVisibleNumber = (number) => {
+    if (isVisible) {
+      return number.toString();
+    }
+    return '*'.repeat(Math.min(number.toString().length, 3));
+  };
 
   // Cargar configuración de perfil
   useEffect(() => {
@@ -586,48 +636,74 @@ const Sidebar = ({
         </nav>
       </div>
 
-      {/* 🚀 Estimado del mes - Solo mes actual */}
+      {/* 🚀 Estimado del mes con botón de visibilidad */}
       <div className="px-4 mb-6">
         <div className="p-3 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 flex-1 flex flex-col">
-          <h4 className="text-xs text-purple-100 font-medium mb-2">
-            Estimado de {nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}
-          </h4>
+          {/* Header con botón de visibilidad */}
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs text-purple-100 font-medium">
+              Estimado de {nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}
+            </h4>
 
-          <div className={`text-lg font-bold mb-3 ${gananciaNeta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-            {formatCurrency(gananciaNeta)}
+            {/* 🚀 BOTÓN DE VISIBILIDAD con animación */}
+            <button
+              onClick={toggleVisibility}
+              className={`p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-300 ${isAnimating ? 'scale-110 rotate-180' : 'scale-100 rotate-0'
+                }`}
+              title={isVisible ? 'Ocultar montos' : 'Mostrar montos'}
+            >
+              {isVisible ? (
+                <Eye size={16} className="text-purple-200 hover:text-white transition-colors" />
+              ) : (
+                <EyeOff size={16} className="text-purple-300 hover:text-white transition-colors" />
+              )}
+            </button>
           </div>
 
-          {/* Detalles compactos */}
-          <div className="text-xs text-purple-200 space-y-1 flex-1">
+          {/* Monto principal con animación */}
+          <div
+            className={`transition-all duration-300 ${isAnimating ? 'opacity-0 transform scale-95' : 'opacity-100 transform scale-100'
+              }`}
+          >
+            <div className={`text-lg font-bold mb-3 ${gananciaNeta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {formatVisibleAmount(gananciaNeta, formatCurrency)}
+            </div>
+          </div>
+
+          {/* Detalles compactos con animación */}
+          <div
+            className={`text-xs text-purple-200 space-y-1 flex-1 transition-all duration-300 ${isAnimating ? 'opacity-0 transform scale-95' : 'opacity-100 transform scale-100'
+              }`}
+          >
             {/* INGRESOS */}
             {detalle.sesiones > 0 && (
               <div className="flex justify-between">
                 <span>🧠 Sesiones ({detalle.sesiones})</span>
-                <span className="text-green-300">{formatCurrency(detalle.ingresosSesiones)}</span>
+                <span className="text-green-300">{formatVisibleAmount(detalle.ingresosSesiones, formatCurrency)}</span>
               </div>
             )}
             {detalle.evaluaciones > 0 && (
               <div className="flex justify-between">
                 <span>📋 Evaluaciones ({detalle.evaluaciones})</span>
-                <span className="text-green-300">{formatCurrency(detalle.ingresosEvaluaciones)}</span>
+                <span className="text-green-300">{formatVisibleAmount(detalle.ingresosEvaluaciones, formatCurrency)}</span>
               </div>
             )}
             {detalle.reevaluaciones > 0 && (
               <div className="flex justify-between">
                 <span>📝 Re-evaluaciones ({detalle.reevaluaciones})</span>
-                <span className="text-green-300">{formatCurrency(detalle.ingresosReevaluaciones)}</span>
+                <span className="text-green-300">{formatVisibleAmount(detalle.ingresosReevaluaciones, formatCurrency)}</span>
               </div>
             )}
             {detalle.devoluciones > 0 && (
               <div className="flex justify-between">
                 <span>🔄 Devoluciones ({detalle.devoluciones})</span>
-                <span className="text-green-300">{formatCurrency(detalle.ingresosDevoluciones)}</span>
+                <span className="text-green-300">{formatVisibleAmount(detalle.ingresosDevoluciones, formatCurrency)}</span>
               </div>
             )}
             {detalle.reuniones_colegio > 0 && (
               <div className="flex justify-between">
                 <span>🏫 Reuniones ({detalle.reuniones_colegio})</span>
-                <span className="text-green-300">{formatCurrency(detalle.ingresosReuniones)}</span>
+                <span className="text-green-300">{formatVisibleAmount(detalle.ingresosReuniones, formatCurrency)}</span>
               </div>
             )}
 
@@ -640,42 +716,42 @@ const Sidebar = ({
             {supervisionesDetalle?.supervisiones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>👥 Supervisiones ({supervisionesDetalle.supervisiones.cantidad})</span>
-                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.supervisiones.monto)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(supervisionesDetalle.supervisiones.monto, formatCurrency)}</span>
               </div>
             )}
 
             {supervisionesDetalle?.acomp_evaluaciones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>📋 Acomp. Evaluaciones ({supervisionesDetalle.acomp_evaluaciones.cantidad})</span>
-                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_evaluaciones.monto)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(supervisionesDetalle.acomp_evaluaciones.monto, formatCurrency)}</span>
               </div>
             )}
 
             {supervisionesDetalle?.acomp_reevaluaciones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>📝 Acomp. Re-evaluaciones ({supervisionesDetalle.acomp_reevaluaciones.cantidad})</span>
-                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_reevaluaciones.monto)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(supervisionesDetalle.acomp_reevaluaciones.monto, formatCurrency)}</span>
               </div>
             )}
 
             {supervisionesDetalle?.acomp_devoluciones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>🔄 Acomp. Devoluciones ({supervisionesDetalle.acomp_devoluciones.cantidad})</span>
-                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_devoluciones.monto)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(supervisionesDetalle.acomp_devoluciones.monto, formatCurrency)}</span>
               </div>
             )}
 
             {supervisionesDetalle?.acomp_reuniones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>🏫 Acomp. Reuniones ({supervisionesDetalle.acomp_reuniones.cantidad})</span>
-                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_reuniones.monto)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(supervisionesDetalle.acomp_reuniones.monto, formatCurrency)}</span>
               </div>
             )}
 
             {supervisionesDetalle?.acomp_sesiones?.cantidad > 0 && (
               <div className="flex justify-between">
                 <span>🧠 Acomp. Sesiones ({supervisionesDetalle.acomp_sesiones.cantidad})</span>
-                <span className="text-red-300">-{formatCurrency(supervisionesDetalle.acomp_sesiones.monto)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(supervisionesDetalle.acomp_sesiones.monto, formatCurrency)}</span>
               </div>
             )}
 
@@ -683,14 +759,14 @@ const Sidebar = ({
             {estimaciones.supervisionesEstimadas > 0 && (
               <div className="flex justify-between">
                 <span>📈 Supervisiones ({estimaciones.supervisionesEstimadas} × 2h)</span>
-                <span className="text-red-300">-{formatCurrency(estimaciones.montoEstimado)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(estimaciones.montoEstimado, formatCurrency)}</span>
               </div>
             )}
 
             {gastoAlquiler > 0 && (
               <div className="flex justify-between">
                 <span>🏠 Alquiler</span>
-                <span className="text-red-300">-{formatCurrency(gastoAlquiler)}</span>
+                <span className="text-red-300">-{formatVisibleAmount(gastoAlquiler, formatCurrency)}</span>
               </div>
             )}
 
@@ -733,7 +809,7 @@ const Sidebar = ({
           </button>
         </div>
         <p className="text-xs text-purple-200 mt-1 text-center">
-          TC: ${tipoCambio?.toLocaleString()}
+          TC: {formatVisibleAmount(tipoCambio, (amount) => `$${amount?.toLocaleString()}`)}
         </p>
       </div>
     </div>

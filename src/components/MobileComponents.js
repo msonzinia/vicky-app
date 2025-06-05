@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Edit3, Plus } from 'lucide-react';
+import { Menu, X, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Edit3, Plus, Eye, EyeOff } from 'lucide-react';
 
 // 🚀 Hook para detectar mobile
 export const useIsMobile = () => {
@@ -18,7 +18,7 @@ export const useIsMobile = () => {
   return isMobile;
 };
 
-// 🚀 Header Mobile con logo jel3.png
+// 🚀 Header Mobile con logo jel3.png y visibilidad de montos
 export const MobileHeader = ({
   onToggleSidebar,
   gananciaNeta,
@@ -27,6 +27,48 @@ export const MobileHeader = ({
   onCategorizarSesiones,
   onNuevaSesion
 }) => {
+  // Estados para visibilidad de montos
+  const [isVisible, setIsVisible] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Cargar configuración inicial del localStorage
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem('moneyVisibility');
+    if (savedVisibility !== null) {
+      setIsVisible(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Función para toggle con animación
+  const toggleVisibility = () => {
+    setIsAnimating(true);
+
+    setTimeout(() => {
+      const newVisibility = !isVisible;
+      setIsVisible(newVisibility);
+      localStorage.setItem('moneyVisibility', JSON.stringify(newVisibility));
+      setIsAnimating(false);
+    }, 150);
+  };
+
+  // Función para formatear montos (mostrar o ocultar)
+  const formatVisibleAmount = (amount, formatCurrency) => {
+    if (isVisible) {
+      return formatCurrency(amount);
+    }
+
+    const formattedAmount = formatCurrency(amount);
+    const currencySymbol = formattedAmount.match(/[A-Z]{3}|\$/) || '';
+    const length = formattedAmount.replace(/[^\d]/g, '').length;
+    const hiddenAmount = '*'.repeat(Math.min(length, 6));
+
+    if (formattedAmount.includes('USD')) {
+      return `${hiddenAmount} USD`;
+    } else {
+      return `${hiddenAmount} ARS`;
+    }
+  };
+
   // Obtener el mes actual
   const mesActual = new Date().toLocaleDateString('es-AR', { month: 'long' });
   const mesCapitalizado = mesActual.charAt(0).toUpperCase() + mesActual.slice(1);
@@ -49,11 +91,34 @@ export const MobileHeader = ({
           <div className="hidden font-bold text-lg">JEL</div>
         </div>
 
-        {/* Proyección del mes - CENTRADO */}
-        <div className="flex-1 text-center mx-4">
-          <div className="text-xs text-purple-200">Ganancia {mesCapitalizado}</div>
-          <div className={`text-xl font-bold ${gananciaNeta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-            {formatCurrency(gananciaNeta)}
+        {/* Proyección del mes - CENTRADO con visibilidad */}
+        <div className="flex-1 text-center mx-4 relative">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <div className="text-xs text-purple-200">Ganancia {mesCapitalizado}</div>
+
+            {/* 🚀 BOTÓN DE VISIBILIDAD con animación MÁS GRANDE */}
+            <button
+              onClick={toggleVisibility}
+              className={`p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-300 ${isAnimating ? 'scale-110 rotate-180' : 'scale-100 rotate-0'
+                }`}
+              title={isVisible ? 'Ocultar montos' : 'Mostrar montos'}
+            >
+              {isVisible ? (
+                <Eye size={14} className="text-purple-200 hover:text-white transition-colors" />
+              ) : (
+                <EyeOff size={14} className="text-purple-300 hover:text-white transition-colors" />
+              )}
+            </button>
+          </div>
+
+          {/* Monto con animación */}
+          <div
+            className={`transition-all duration-300 ${isAnimating ? 'opacity-0 transform scale-95' : 'opacity-100 transform scale-100'
+              }`}
+          >
+            <div className={`text-xl font-bold ${gananciaNeta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {formatVisibleAmount(gananciaNeta, formatCurrency)}
+            </div>
           </div>
         </div>
 
@@ -144,6 +209,25 @@ const SesionesPendientesModal = ({
   onCategorizarSesion,
   formatCurrency
 }) => {
+  // Estados para visibilidad de montos
+  const [isVisible, setIsVisible] = useState(true);
+
+  // Cargar configuración inicial del localStorage
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem('moneyVisibility');
+    if (savedVisibility !== null) {
+      setIsVisible(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Función para ocultar números simples
+  const formatVisibleNumber = (number) => {
+    if (isVisible) {
+      return number.toString();
+    }
+    return '*'.repeat(Math.min(number.toString().length, 3));
+  };
+
   // Funciones helper para el modal
   const getPacienteById = (id) => pacientes.find(p => p.id === id);
   const getSupervisoraById = (id) => supervisoras.find(s => s.id === id);
@@ -180,7 +264,7 @@ const SesionesPendientesModal = ({
         <div className="sticky top-0 bg-red-50 border-b border-red-200 p-3 flex items-center justify-between">
           <div>
             <h3 className="font-bold text-red-800">⚠️ Sin Categorizar</h3>
-            <p className="text-red-600 text-sm">{sesionesPendientes.length} sesiones</p>
+            <p className="text-red-600 text-sm">{formatVisibleNumber(sesionesPendientes.length)} sesiones</p>
           </div>
           <button
             onClick={onClose}
@@ -208,7 +292,7 @@ const SesionesPendientesModal = ({
                       {fechaSesion.toLocaleDateString('es-AR')} • {sesion.tipo_sesion}
                     </div>
                     <div className="text-xs text-red-600 font-medium">
-                      Hace {diasPasados} día{diasPasados !== 1 ? 's' : ''}
+                      Hace {formatVisibleNumber(diasPasados)} día{diasPasados !== 1 ? 's' : ''}
                     </div>
                   </div>
                 </div>
@@ -251,6 +335,43 @@ export const CalendarioMobile = ({
   const [fechaActual, setFechaActual] = useState(new Date());
   const [showPendientesModal, setShowPendientesModal] = useState(false);
   const hoy = new Date();
+
+  // Estados para visibilidad de montos
+  const [isVisible, setIsVisible] = useState(true);
+
+  // Cargar configuración inicial del localStorage
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem('moneyVisibility');
+    if (savedVisibility !== null) {
+      setIsVisible(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Función para formatear montos (mostrar o ocultar)
+  const formatVisibleAmount = (amount, formatCurrency) => {
+    if (isVisible) {
+      return formatCurrency(amount);
+    }
+
+    const formattedAmount = formatCurrency(amount);
+    const currencySymbol = formattedAmount.match(/[A-Z]{3}|\$/) || '';
+    const length = formattedAmount.replace(/[^\d]/g, '').length;
+    const hiddenAmount = '*'.repeat(Math.min(length, 6));
+
+    if (formattedAmount.includes('USD')) {
+      return `${hiddenAmount} USD`;
+    } else {
+      return `${hiddenAmount} ARS`;
+    }
+  };
+
+  // Función para ocultar números simples
+  const formatVisibleNumber = (number) => {
+    if (isVisible) {
+      return number.toString();
+    }
+    return '*'.repeat(Math.min(number.toString().length, 3));
+  };
 
   // Comunicar la fecha actual al componente padre
   React.useEffect(() => {
@@ -334,7 +455,7 @@ export const CalendarioMobile = ({
               </div>
               <div className="text-left">
                 <div className="font-bold text-lg">
-                  ⚠️ {sesionesPendientesGlobales.length} SIN CATEGORIZAR
+                  ⚠️ {formatVisibleNumber(sesionesPendientesGlobales.length)} SIN CATEGORIZAR
                 </div>
                 <div className="text-red-100 text-sm">
                   Toca para categorizar rápidamente
@@ -411,11 +532,11 @@ export const CalendarioMobile = ({
             <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-gray-800">
-                  📋 {sesionesDelDia.length} sesión{sesionesDelDia.length > 1 ? 'es' : ''}
+                  📋 {formatVisibleNumber(sesionesDelDia.length)} sesión{sesionesDelDia.length > 1 ? 'es' : ''}
                 </h4>
                 {sesionsPendientesHoy.length > 0 && (
                   <span className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg animate-pulse">
-                    {sesionsPendientesHoy.length} pendiente{sesionsPendientesHoy.length > 1 ? 's' : ''}
+                    {formatVisibleNumber(sesionsPendientesHoy.length)} pendiente{sesionsPendientesHoy.length > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
@@ -470,7 +591,7 @@ export const CalendarioMobile = ({
                             {sesion.tipo_sesion}
                           </span>
                           <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">
-                            {formatCurrency(sesion.precio_por_hora * sesion.duracion_horas)}
+                            {formatVisibleAmount(sesion.precio_por_hora * sesion.duracion_horas, formatCurrency)}
                           </span>
                         </div>
 
