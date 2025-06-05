@@ -55,7 +55,7 @@ const BottomNavigation = ({ activeView, setActiveView, sesionsPendientes }) => {
   ];
 
   return (
-    <div className={`lg:hidden fixed left-4 right-4 z-50 transition-all duration-300 ease-in-out ${scrollDirection === "down" ? "bottom-[-100px]" : "bottom-4"
+    <div className={`lg:hidden fixed left-4 right-4 z-50 transition-all duration-300 ease-in-out ${scrollDirection === "down" ? "bottom-[-100px]" : "bottom-8"
       }`}>
       {/* Contenedor principal flotante */}
       <div className="bg-white/95 backdrop-blur-lg border border-gray-200/50 rounded-2xl shadow-2xl">
@@ -71,8 +71,8 @@ const BottomNavigation = ({ activeView, setActiveView, sesionsPendientes }) => {
                   setActiveView(id);
                 }}
                 className={`relative flex flex-col items-center py-2 px-3 rounded-xl transition-all duration-300 transform ${isActive
-                    ? 'scale-110 bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg text-white'
-                    : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800 active:scale-95'
+                  ? 'scale-110 bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg text-white'
+                  : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800 active:scale-95'
                   }`}
               >
                 {/* Indicador de vista activa */}
