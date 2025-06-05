@@ -273,7 +273,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Dashboard Financiero</h1>
-            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 21-9)</p>
+            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 16-15)</p>
           </div>
         </div>
 
@@ -295,7 +295,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
               <li>• Sesiones realizadas o canceladas sin antelación</li>
             </ul>
             <p className="text-xs text-gray-400 mt-3">
-              Los datos se agrupan por período del 21 al 9 del mes siguiente
+              Los datos se agrupan por período del 16 al 15 del mes siguiente
             </p>
           </div>
         </div>
@@ -313,7 +313,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Dashboard Financiero</h1>
-            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 21-9)</p>
+            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 16-15)</p>
           </div>
         </div>
 
@@ -406,7 +406,7 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
           <h3 className="text-lg font-bold text-gray-800">
             Evolución de Ganancias vs Horas Trabajadas
           </h3>
-          <div className="text-sm text-gray-500">Período normalizado 21-9</div>
+          <div className="text-sm text-gray-500">Período normalizado 16-15</div>
         </div>
 
         <ResponsiveContainer width="100%" height={400}>

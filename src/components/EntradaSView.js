@@ -48,19 +48,20 @@ const EntradaSView = ({
     const diaDelMes = hoy.getDate();
 
     let mesHasta;
-    if (diaDelMes <= 9) {
-      // Del 1 al 9: incluir hasta mes anterior
+    if (diaDelMes <= 15) {
+      // Del 1 al 15: incluir hasta mes anterior
       mesHasta = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
     } else {
-      // Del 10 al 31: incluir hasta mes actual
+      // Del 16 al 31: incluir hasta mes actual
       mesHasta = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     }
 
-    console.log('🗓️ Calculando saldo hasta:', {
+    console.log('🗓️ Calculando saldo hasta (nueva lógica 16-15):', {
       fechaHoy: hoy.toISOString().split('T')[0],
       diaDelMes,
       mesHasta: mesHasta.toISOString().split('T')[0],
-      logica: diaDelMes <= 9 ? 'Hasta mes anterior' : 'Hasta mes actual'
+      logica: diaDelMes <= 15 ? 'Hasta mes anterior (del 1-15)' : 'Hasta mes actual (del 16-31)',
+      razonamiento: 'Consistente con período de ganancias 16-15 del dashboard'
     });
 
     setMesHastaSaldo(mesHasta);
