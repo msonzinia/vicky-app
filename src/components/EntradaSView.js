@@ -309,7 +309,7 @@ const EntradaSView = ({
   return (
     <div className="space-y-6">
       {/* Header con búsqueda, filtros y botón agregar */}
-      <div className="glass-effect p-6 rounded-xl">
+      <div className="glass-effect p-4 lg:p-6 rounded-xl">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative flex-1 max-w-md">
@@ -323,34 +323,34 @@ const EntradaSView = ({
               />
             </div>
 
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">TC Blue:</span> ${tipoCambioActual.toLocaleString()}
+            <div className="flex items-center gap-2 lg:gap-4 flex-wrap">
+              <div className="text-xs lg:text-sm text-gray-600">
+                <span className="font-medium">TC:</span> ${tipoCambioActual.toLocaleString()}
               </div>
 
               <button
                 onClick={() => setShowFiltros(!showFiltros)}
-                className={`px-4 py-3 rounded-lg flex items-center gap-2 font-medium transition-all ${showFiltros ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`px-3 lg:px-4 py-2 lg:py-3 rounded-lg flex items-center gap-2 font-medium transition-all text-sm ${showFiltros ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
-                <Filter size={20} />
-                Filtros
+                <Filter size={16} />
+                <span className="hidden lg:inline">Filtros</span>
               </button>
 
               <button
                 onClick={() => setShowEliminados(!showEliminados)}
-                className={`px-4 py-3 rounded-lg flex items-center gap-2 font-medium transition-all ${showEliminados ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`px-3 lg:px-4 py-2 lg:py-3 rounded-lg flex items-center gap-2 font-medium transition-all text-sm ${showEliminados ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
-                🗑️ {showEliminados ? 'Ver Activos' : 'Ver Eliminados'}
+                🗑️ <span className="hidden lg:inline">{showEliminados ? 'Ver Activos' : 'Ver Eliminados'}</span>
               </button>
 
               <button
                 onClick={() => openModal()}
-                className="btn-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-medium shadow-lg"
+                className="btn-primary text-white px-4 lg:px-6 py-2 lg:py-3 rounded-xl flex items-center gap-2 font-medium shadow-lg text-sm"
               >
-                <Plus size={20} />
-                Nuevo Pago Recibido
+                <Plus size={16} />
+                <span className="hidden sm:inline">Nuevo Pago</span>
               </button>
             </div>
           </div>
@@ -463,70 +463,91 @@ const EntradaSView = ({
         </div>
       )}
 
-      {/* Lista de entradas */}
-      <div className="grid gap-4">
+      {/* ✨ Lista de entradas - COMPACTA */}
+      <div className="grid gap-2 lg:gap-4">
         {filteredEntradas.map(entrada => (
-          <div key={entrada.id} className="card p-6 hover-lift transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center shadow-lg">
-                  <DollarSign className="text-white" size={24} />
-                </div>
+          <div key={entrada.id} className="card p-3 lg:p-4 hover-lift transition-all duration-300">
+            <div className="flex items-center gap-3 lg:gap-4">
+              {/* Ícono - más pequeño en mobile */}
+              <div className="w-8 h-8 lg:w-12 lg:h-12 bg-gradient-to-br from-green-500 to-green-700 rounded-lg lg:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                <DollarSign className="text-white" size={16} />
+              </div>
 
-                <div className="space-y-1">
-                  <h3 className="text-lg font-bold text-gray-800">
-                    {entrada.pacientes?.nombre_apellido || 'Paciente no encontrado'}
-                  </h3>
-                  <p className="text-gray-600 text-sm">
-                    <span className="font-medium">Tutor:</span> {entrada.pacientes?.nombre_apellido_tutor}
-                  </p>
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <Calendar size={14} />
-                      <span>{new Date(entrada.fecha).toLocaleDateString('es-AR')}</span>
+              {/* Información principal - layout mejorado */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm lg:text-lg font-bold text-gray-800 truncate">
+                      {entrada.pacientes?.nombre_apellido || 'Paciente no encontrado'}
+                    </h3>
+
+                    {/* Info secundaria en mobile más compacta */}
+                    <div className="lg:hidden text-xs text-gray-500 space-y-1 mt-1">
+                      <div>{entrada.pacientes?.nombre_apellido_tutor}</div>
+                      <div className="flex items-center gap-3">
+                        <span>{new Date(entrada.fecha).toLocaleDateString('es-AR')}</span>
+                        <span>{entrada.metodo}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Receipt size={14} />
-                      <span>{entrada.metodo}</span>
+
+                    {/* Info desktop */}
+                    <div className="hidden lg:block space-y-1">
+                      <p className="text-gray-600 text-sm">
+                        <span className="font-medium">Tutor:</span> {entrada.pacientes?.nombre_apellido_tutor}
+                      </p>
+                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <Calendar size={14} />
+                          <span>{new Date(entrada.fecha).toLocaleDateString('es-AR')}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Receipt size={14} />
+                          <span>{entrada.metodo}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Monto y badges */}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-lg lg:text-2xl font-bold text-green-600">
+                      {formatCurrency(entrada.monto_ars)}
+                    </div>
+                    <div className="text-xs lg:text-sm text-gray-500">
+                      (${(entrada.monto_ars / tipoCambioActual).toFixed(0)} USD)
+                    </div>
+
+                    {/* Badges más compactos */}
+                    <div className="flex items-center gap-1 mt-1 lg:mt-2 justify-end flex-wrap">
+                      {entrada.facturado && (
+                        <span className="px-1.5 lg:px-2 py-0.5 lg:py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                          Fact.
+                        </span>
+                      )}
+                      {entrada.comprobante_url && (
+                        <span className="px-1.5 lg:px-2 py-0.5 lg:py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                          Comp.
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-
-              <div className="text-right">
-                <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(entrada.monto_ars)}
-                </div>
-                <div className="text-sm text-gray-500">
-                  (${(entrada.monto_ars / tipoCambioActual).toFixed(0)} USD)
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  {entrada.facturado && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                      Facturado
-                    </span>
-                  )}
-                  {entrada.comprobante_url && (
-                    <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
-                      Comprobante
-                    </span>
-                  )}
-                </div>
-              </div>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-gray-200 flex justify-end gap-2">
+            {/* Botones de acción - más compactos */}
+            <div className="mt-2 lg:mt-4 pt-2 lg:pt-4 border-t border-gray-200 flex justify-end gap-1 lg:gap-2">
               {!showEliminados ? (
                 <>
                   <button
                     onClick={() => openModal(entrada)}
-                    className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors text-sm"
+                    className="px-2 lg:px-3 py-1 lg:py-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors text-xs lg:text-sm"
                   >
                     Editar
                   </button>
                   <button
                     onClick={() => handleEliminarEntrada(entrada)}
-                    className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors text-sm"
+                    className="px-2 lg:px-3 py-1 lg:py-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors text-xs lg:text-sm"
                   >
                     Eliminar
                   </button>
@@ -534,7 +555,7 @@ const EntradaSView = ({
               ) : (
                 <button
                   onClick={() => handleRestaurarEntrada(entrada)}
-                  className="px-3 py-1.5 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors text-sm"
+                  className="px-2 lg:px-3 py-1 lg:py-1.5 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors text-xs lg:text-sm"
                 >
                   Restaurar
                 </button>
@@ -544,9 +565,9 @@ const EntradaSView = ({
                   href={entrada.comprobante_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                  className="px-2 lg:px-3 py-1 lg:py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors text-xs lg:text-sm"
                 >
-                  Ver Comprobante
+                  <span className="hidden lg:inline">Ver </span>Comp.
                 </a>
               )}
               {entrada.factura_url && (
@@ -554,9 +575,9 @@ const EntradaSView = ({
                   href={entrada.factura_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors text-sm"
+                  className="px-2 lg:px-3 py-1 lg:py-1.5 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors text-xs lg:text-sm"
                 >
-                  Ver Factura
+                  <span className="hidden lg:inline">Ver </span>Fact.
                 </a>
               )}
             </div>
@@ -585,34 +606,34 @@ const EntradaSView = ({
         )}
       </div>
 
-      {/* Resumen estadístico */}
+      {/* Resumen estadístico - más compacto */}
       {filteredEntradas.length > 0 && (
-        <div className="glass-effect p-6 rounded-xl">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">
+        <div className="glass-effect p-4 lg:p-6 rounded-xl">
+          <h3 className="text-base lg:text-lg font-bold text-gray-800 mb-3 lg:mb-4">
             Resumen {searchTerm || Object.values(filtros).some(v => v && v !== 'fecha' && v !== true) ? 'Filtrado' : 'del Mes'}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-xl lg:text-2xl font-bold text-green-600">
                 {filteredEntradas.length}
               </div>
-              <div className="text-sm text-gray-600">Pagos recibidos</div>
+              <div className="text-xs lg:text-sm text-gray-600">Pagos recibidos</div>
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-xl lg:text-2xl font-bold text-green-600">
                 {formatCurrency(
                   filteredEntradas.reduce((sum, entrada) => sum + entrada.monto_ars, 0)
                 )}
               </div>
-              <div className="text-sm text-gray-600">Total ingresado</div>
+              <div className="text-xs lg:text-sm text-gray-600">Total ingresado</div>
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
+              <div className="text-xl lg:text-2xl font-bold text-blue-600">
                 {filteredEntradas.filter(e => e.facturado).length}
               </div>
-              <div className="text-sm text-gray-600">Pagos facturados</div>
+              <div className="text-xs lg:text-sm text-gray-600">Pagos facturados</div>
             </div>
           </div>
         </div>

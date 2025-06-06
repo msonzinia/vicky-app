@@ -524,9 +524,12 @@ export const CalendarioMobile = ({
                           <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
                             {sesion.tipo_sesion}
                           </span>
-                          {/* ✅ NO ocultamos el costo por sesión */}
-                          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">
-                            {formatCurrency(sesion.precio_por_hora * sesion.duracion_horas)}
+                          {/* ✅ Verde para ingresos (pacientes), Rojo para gastos (supervisiones) */}
+                          <span className={`text-xs px-2 py-1 rounded-full font-bold ${sesion.supervisora_id
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-green-100 text-green-800'
+                            }`}>
+                            {sesion.supervisora_id ? '-' : ''}{formatCurrency(sesion.precio_por_hora * sesion.duracion_horas)}
                           </span>
                         </div>
 
