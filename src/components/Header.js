@@ -40,8 +40,11 @@ const Header = ({
     }
   };
 
-  // No mostrar header para calendario, alquiler, facturar Y DASHBOARD
-  if (activeView === 'calendario' || activeView === 'alquiler' || activeView === 'facturar' || activeView === 'dashboard') {
+  // 🚀 ACTUALIZADO: No mostrar header para calendario, alquiler, facturar Y DASHBOARD
+  if (activeView === 'calendario' ||
+    activeView === 'alquiler' ||
+    activeView === 'facturar' ||
+    activeView === 'dashboard') {
     return null;
   }
 

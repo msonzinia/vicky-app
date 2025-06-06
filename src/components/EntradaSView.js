@@ -233,12 +233,28 @@ const EntradaSView = ({
     }
   };
 
+  // 🔧 FUNCIÓN CORREGIDA: Filtrar solo las columnas que pertenecen a pagos_recibidos
   const handleSave = async (formData) => {
     try {
+      // Filtrar solo las columnas que pertenecen a la tabla pagos_recibidos
+      const dataToSave = {
+        fecha: formData.fecha,
+        paciente_id: formData.paciente_id,
+        metodo: formData.metodo,
+        monto_ars: parseFloat(formData.monto_ars),
+        tipo_cambio: formData.tipo_cambio || tipoCambioActual,
+        comprobante_url: formData.comprobante_url || null,
+        facturado: formData.facturado || false,
+        factura_url: formData.factura_url || null,
+        factura_a_nombre: formData.factura_a_nombre || null,
+        factura_cuil: formData.factura_cuil || null,
+        facturador: formData.facturador || null
+      };
+
       if (editingEntrada) {
         const { error } = await supabase
           .from('pagos_recibidos')
-          .update(formData)
+          .update(dataToSave)
           .eq('id', editingEntrada.id);
 
         if (error) throw error;
@@ -249,7 +265,7 @@ const EntradaSView = ({
       } else {
         const { error } = await supabase
           .from('pagos_recibidos')
-          .insert([formData]);
+          .insert([dataToSave]);
 
         if (error) throw error;
 
@@ -778,12 +794,7 @@ const EntradaModal = ({ isOpen, onClose, onSave, entrada, pacientes, tipoCambio,
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const dataToSave = {
-      ...formData,
-      monto_ars: parseFloat(formData.monto_ars),
-      tipo_cambio: tipoCambio
-    };
-    onSave(dataToSave);
+    onSave(formData);
   };
 
   if (!isOpen) return null;

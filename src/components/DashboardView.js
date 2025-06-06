@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart3, TrendingUp, TrendingDown, Clock, DollarSign, UserX, Users, AlertTriangle, Calendar } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Clock, DollarSign, UserX, Users, AlertTriangle, Calendar, Receipt } from 'lucide-react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie, BarChart } from 'recharts';
 import { supabase } from '../lib/supabase';
+import DashboardFacturacion from './DashboardFacturacion';
 
 const DashboardView = ({ currencyMode, tipoCambio }) => {
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,9 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
   });
   const [vistaHistoricaCancelaciones, setVistaHistoricaCancelaciones] = useState(false);
   const [datosHistoricoCancelaciones, setDatosHistoricoCancelaciones] = useState([]);
+
+  // 🚀 NUEVO: Estado para controlar qué sección mostrar
+  const [seccionActiva, setSeccionActiva] = useState('financiero'); // 'financiero' | 'facturacion'
 
   // Cargar datos del dashboard financiero
   const cargarDatosDashboard = useCallback(async () => {
@@ -263,17 +267,43 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
     );
   }
 
-  // Si no hay datos financieros
-  if (datosGrafico.length === 0) {
+  // Si no hay datos financieros y estamos en la sección financiera
+  if (datosGrafico.length === 0 && seccionActiva === 'financiero') {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
-            <BarChart3 className="text-white" size={24} />
+        {/* 🚀 NUEVO: Navegación entre secciones */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
+              <BarChart3 className="text-white" size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+              <p className="text-gray-600">Análisis integral de tu práctica profesional</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Dashboard Financiero</h1>
-            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 16-15)</p>
+
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setSeccionActiva('financiero')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${seccionActiva === 'financiero'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              <BarChart3 className="inline mr-2" size={16} />
+              Financiero
+            </button>
+            <button
+              onClick={() => setSeccionActiva('facturacion')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${seccionActiva === 'facturacion'
+                  ? 'bg-white text-green-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              <Receipt className="inline mr-2" size={16} />
+              Facturación
+            </button>
           </div>
         </div>
 
@@ -298,30 +328,115 @@ const DashboardView = ({ currencyMode, tipoCambio }) => {
               Los datos se agrupan por período del 16 al 15 del mes siguiente
             </p>
           </div>
+
+          <div className="mt-6">
+            <button
+              onClick={() => setSeccionActiva('facturacion')}
+              className="btn-primary text-white px-6 py-3 rounded-xl font-medium"
+            >
+              <Receipt className="inline mr-2" size={16} />
+              Ver Dashboard de Facturación
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  // 🚀 NUEVO: Renderizar la sección activa
+  if (seccionActiva === 'facturacion') {
+    return (
+      <div className="space-y-6">
+        {/* Navegación entre secciones */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center">
+              <Receipt className="text-white" size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+              <p className="text-gray-600">Análisis integral de tu práctica profesional</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setSeccionActiva('financiero')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${seccionActiva === 'financiero'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              <BarChart3 className="inline mr-2" size={16} />
+              Financiero
+            </button>
+            <button
+              onClick={() => setSeccionActiva('facturacion')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${seccionActiva === 'facturacion'
+                  ? 'bg-white text-green-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              <Receipt className="inline mr-2" size={16} />
+              Facturación
+            </button>
+          </div>
+        </div>
+
+        {/* Componente de Dashboard de Facturación */}
+        <DashboardFacturacion
+          currencyMode={currencyMode}
+          tipoCambio={tipoCambio}
+        />
+      </div>
+    );
+  }
+
+  // Dashboard financiero normal (código existente)
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* 🚀 NUEVO: Header con navegación entre secciones */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
             <BarChart3 className="text-white" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Dashboard Financiero</h1>
-            <p className="text-gray-600">Ganancias netas y horas trabajadas (período 16-15)</p>
+            <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+            <p className="text-gray-600">Análisis integral de tu práctica profesional</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 rounded-lg border border-purple-200">
-          <DollarSign className="text-purple-600" size={16} />
-          <span className="text-sm font-medium text-purple-700">
-            Mostrando en {currencyMode}
-          </span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setSeccionActiva('financiero')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${seccionActiva === 'financiero'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              <BarChart3 className="inline mr-2" size={16} />
+              Financiero
+            </button>
+            <button
+              onClick={() => setSeccionActiva('facturacion')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${seccionActiva === 'facturacion'
+                  ? 'bg-white text-green-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              <Receipt className="inline mr-2" size={16} />
+              Facturación
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 rounded-lg border border-purple-200">
+            <DollarSign className="text-purple-600" size={16} />
+            <span className="text-sm font-medium text-purple-700">
+              Mostrando en {currencyMode}
+            </span>
+          </div>
         </div>
       </div>
 
