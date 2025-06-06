@@ -550,7 +550,7 @@ const DashboardFacturacion = ({ currencyMode, tipoCambio }) => {
         </div>
       </div>
 
-      {/* Gráfico mensual de facturación */}
+      {/* ✨ GRÁFICO MENSUAL DE FACTURACIÓN - BARRAS APILADAS */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-bold text-gray-800">
@@ -611,7 +611,7 @@ const DashboardFacturacion = ({ currencyMode, tipoCambio }) => {
                             <span className="font-medium">{formatCurrency(data.total_facturado)}</span>
                           </div>
                           <div className="flex items-center justify-between gap-4">
-                            <span className="text-gray-600">Sin facturar:</span>
+                            <span className="text-red-600">Sin facturar:</span>
                             <span className="font-medium">{formatCurrency(data.entradas_no_facturadas)}</span>
                           </div>
                           <div className="flex items-center justify-between gap-4 pt-1 border-t">
@@ -628,22 +628,27 @@ const DashboardFacturacion = ({ currencyMode, tipoCambio }) => {
 
               <Legend />
 
+              {/* ✨ BARRAS APILADAS - Facturado (abajo, verde) */}
               <Bar
                 yAxisId="dinero"
                 dataKey="total_facturado"
+                stackId="total"
                 name="Facturado"
                 fill="#10B981"
-                radius={[4, 4, 0, 0]}
+                radius={[0, 0, 0, 0]}
               />
 
+              {/* ✨ BARRAS APILADAS - Sin facturar (arriba, rojo) */}
               <Bar
                 yAxisId="dinero"
                 dataKey="entradas_no_facturadas"
+                stackId="total"
                 name="Sin facturar"
                 fill="#EF4444"
                 radius={[4, 4, 0, 0]}
               />
 
+              {/* Línea de porcentaje de facturación */}
               <Line
                 yAxisId="porcentaje"
                 type="monotone"
@@ -747,7 +752,7 @@ const DashboardFacturacion = ({ currencyMode, tipoCambio }) => {
               <div className="flex items-center justify-between mt-1">
                 <span className="text-gray-600">% utilizado:</span>
                 <span className={`font-medium ${datosFacturacion.porcentaje_limite_utilizado > 90 ? 'text-red-600' :
-                    datosFacturacion.porcentaje_limite_utilizado > 80 ? 'text-orange-600' : 'text-green-600'
+                  datosFacturacion.porcentaje_limite_utilizado > 80 ? 'text-orange-600' : 'text-green-600'
                   }`}>
                   {datosFacturacion.porcentaje_limite_utilizado}%
                 </span>
