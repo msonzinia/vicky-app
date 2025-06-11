@@ -29,13 +29,42 @@ const MobileModalEntrada = ({
   const [saldoPaciente, setSaldoPaciente] = useState(0);
   const [loadingSaldo, setLoadingSaldo] = useState(false);
 
+  // 🚀 NUEVO: Prevenir scroll del body cuando modal está abierto
+  useEffect(() => {
+    if (isOpen) {
+      // Prevenir scroll del body
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = `-${window.scrollY}px`;
+    } else {
+      // Restaurar scroll del body
+      const scrollY = document.body.style.top;
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      }
+    }
+
+    return () => {
+      // Cleanup al desmontar
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+    };
+  }, [isOpen]);
+
   const initializeForm = () => {
     const pacientesActivos = pacientes.filter(p => p.activo);
     setFormData({
       fecha: new Date().toISOString().split('T')[0],
       paciente_id: pacientesActivos.length === 1 ? pacientesActivos[0].id : '',
       metodo: 'Transferencia',
-      monto_ars: '',
+      monto_ars: pacientesActivos.length === 1 ? pacientesActivos[0].precio_por_hora.toString() : '',
       tipo_cambio: tipoCambio,
       comprobante_url: '',
       facturado: false,
@@ -55,15 +84,53 @@ const MobileModalEntrada = ({
     }
   }, [isOpen, pacientes, tipoCambio]);
 
-  // Calcular saldo del paciente (simplificado para mobile)
+  // 🚀 FUNCIÓN EXACTA del desktop: Calcular saldo usando la view
   const calcularSaldoPaciente = async (pacienteId) => {
     if (!pacienteId) return;
     
     try {
       setLoadingSaldo(true);
-      // Aquí podrías usar la misma lógica que en EntradaSView.js
-      // Por simplicidad, ponemos un placeholder
-      setSaldoPaciente(0);
+      console.log('💰 Calculando saldo del paciente:', pacienteId);
+
+      // Usar la misma lógica que EntradaSView para calcular mesHasta
+      const hoy = new Date();
+      const diaDelMes = hoy.getDate();
+      let mesHasta;
+      if (diaDelMes <= 15) {
+        mesHasta = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+      } else {
+        mesHasta = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      }
+
+      const año = mesHasta.getFullYear();
+      const mes = mesHasta.getMonth() + 1;
+
+      const { data, error } = await supabase
+        .from('resumen_facturacion_mensual')
+        .select('total_final, debug_sesiones_anteriores, debug_pagos_totales')
+        .eq('paciente_id', pacienteId)
+        .eq('año', año)
+        .eq('mes', mes)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      const saldoCalculado = data?.total_final || 0;
+      console.log('💰 Saldo calculado:', {
+        pacienteId,
+        hasta: `${año}-${mes}`,
+        saldo: saldoCalculado
+      });
+
+      setSaldoPaciente(saldoCalculado);
+
+      // Auto-completar monto si hay saldo positivo
+      if (saldoCalculado > 0) {
+        setFormData(prev => ({ ...prev, monto_ars: saldoCalculado.toString() }));
+      }
+
     } catch (error) {
       console.error('Error calculando saldo:', error);
       setSaldoPaciente(0);
@@ -169,10 +236,10 @@ const MobileModalEntrada = ({
 
   return (
     <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50">
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[90vh] overflow-hidden animate-slide-up">
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[90vh] flex flex-col animate-slide-up">
         
-        {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-t-3xl">
+        {/* Header fijo */}
+        <div className="flex-shrink-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-t-3xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
@@ -204,216 +271,249 @@ const MobileModalEntrada = ({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto pb-20" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+        {/* 🚀 CONTENIDO CON SCROLL CORRECTO */}
+        <div 
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{ 
+            WebkitOverflowScrolling: 'touch',
+            maxHeight: 'calc(90vh - 140px - 80px)' // Altura máxima menos header y footer
+          }}
+        >
+          <div className="p-6 space-y-6 pb-4">
 
-          {/* STEP 1: Paciente y Fecha */}
-          {currentStep === 1 && (
-            <div className="space-y-4">
-              <h3 className="text-xl font-bold text-gray-800 mb-6">¿De qué paciente es el pago?</h3>
+            {/* STEP 1: Paciente y Fecha */}
+            {currentStep === 1 && (
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">¿De qué paciente es el pago?</h3>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <User size={16} />
-                  Paciente
-                </label>
-                <div className="space-y-3">
-                  {pacientesActivos.map(paciente => (
-                    <button
-                      key={paciente.id}
-                      onClick={() => handleInputChange('paciente_id', paciente.id)}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 ${
-                        formData.paciente_id === paciente.id
-                          ? 'border-green-500 bg-green-50 shadow-lg'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: paciente.color }}
-                        >
-                          {paciente.nombre_apellido.split(' ').map(n => n.charAt(0)).join('').slice(0, 2)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-bold text-gray-800">{paciente.nombre_apellido}</div>
-                          <div className="text-sm text-gray-600">
-                            {paciente.nombre_apellido_tutor && (
-                              <span>Tutor: {paciente.nombre_apellido_tutor}</span>
-                            )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <User size={16} />
+                    Paciente
+                  </label>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {pacientesActivos.map(paciente => (
+                      <button
+                        key={paciente.id}
+                        onClick={() => handleInputChange('paciente_id', paciente.id)}
+                        className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                          formData.paciente_id === paciente.id
+                            ? 'border-green-500 bg-green-50 shadow-lg'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                            style={{ backgroundColor: paciente.color }}
+                          >
+                            {paciente.nombre_apellido.split(' ').map(n => n.charAt(0)).join('').slice(0, 2)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-gray-800">{paciente.nombre_apellido}</div>
+                            <div className="text-sm text-gray-600">
+                              {paciente.nombre_apellido_tutor && (
+                                <span>Tutor: {paciente.nombre_apellido_tutor}</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-green-600 font-medium">
+                              ${paciente.precio_por_hora.toLocaleString()}/sesión
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                {errors.paciente_id && (
-                  <p className="text-red-500 text-sm">{errors.paciente_id}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <Calendar size={16} />
-                  Fecha del Pago
-                </label>
-                <input
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) => handleInputChange('fecha', e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 text-lg ${
-                    errors.fecha ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-                {errors.fecha && (
-                  <p className="text-red-500 text-sm mt-1">{errors.fecha}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: Monto y Método */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-6">¿Cuánto y cómo pagó?</h3>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {['Transferencia', 'Efectivo'].map(metodo => (
-                    <button
-                      key={metodo}
-                      onClick={() => handleInputChange('metodo', metodo)}
-                      className={`p-4 rounded-xl border-2 font-medium transition-all ${
-                        formData.metodo === metodo
-                          ? 'border-green-500 bg-green-50 text-green-700'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {metodo}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Monto en Pesos</label>
-                <input
-                  type="number"
-                  value={formData.monto_ars}
-                  onChange={(e) => handleInputChange('monto_ars', e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 text-lg ${
-                    errors.monto_ars ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="15000"
-                />
-                {formData.monto_ars && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    Equivale a ${(formData.monto_ars / tipoCambio).toFixed(0)} USD
-                  </p>
-                )}
-                {errors.monto_ars && (
-                  <p className="text-red-500 text-sm mt-1">{errors.monto_ars}</p>
-                )}
-              </div>
-
-              {/* Total visual */}
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                <div className="text-center">
-                  <div className="text-sm text-green-700 mb-1">Total del pago</div>
-                  <div className="text-2xl font-bold text-green-800">
-                    ${(formData.monto_ars || 0).toLocaleString()}
+                      </button>
+                    ))}
                   </div>
+                  {errors.paciente_id && (
+                    <p className="text-red-500 text-sm">{errors.paciente_id}</p>
+                  )}
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* STEP 3: Comprobante y Facturación */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-6">Documentación</h3>
-
-              {/* Comprobante */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">¿Tiene comprobante?</label>
-                  <div className="flex items-center gap-4">
-                    {formData.comprobante_url ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-green-600 text-sm">✓ Subido</span>
-                        <button
-                          type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, comprobante_url: '' }))}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2">
-                        <Upload size={16} />
-                        {uploading ? 'Subiendo...' : 'Subir'}
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => e.target.files[0] && uploadFile(e.target.files[0])}
-                          className="hidden"
-                          disabled={uploading}
-                        />
-                      </label>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Facturación */}
-              <div className="space-y-4">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="facturado"
-                    checked={formData.facturado}
-                    onChange={(e) => handleInputChange('facturado', e.target.checked)}
-                    className="mr-3 w-4 h-4"
-                  />
-                  <label htmlFor="facturado" className="text-sm font-medium text-gray-700">
-                    ¿Necesita factura?
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Calendar size={16} />
+                    Fecha del Pago
                   </label>
+                  <input
+                    type="date"
+                    value={formData.fecha}
+                    onChange={(e) => handleInputChange('fecha', e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 text-lg ${
+                      errors.fecha ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.fecha && (
+                    <p className="text-red-500 text-sm mt-1">{errors.fecha}</p>
+                  )}
                 </div>
+              </div>
+            )}
 
-                {formData.facturado && (
-                  <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Factura a nombre de</label>
-                      <input
-                        type="text"
-                        value={formData.factura_a_nombre}
-                        onChange={(e) => handleInputChange('factura_a_nombre', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        placeholder="Nombre del tutor"
-                      />
-                    </div>
+            {/* STEP 2: Monto y Método */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">¿Cuánto y cómo pagó?</h3>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">CUIL</label>
-                      <input
-                        type="text"
-                        value={formData.factura_cuil}
-                        onChange={(e) => handleInputChange('factura_cuil', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        placeholder="20-12345678-9"
-                      />
-                    </div>
+                {/* 🎯 MOSTRAR INFO DEL PACIENTE SELECCIONADO */}
+                {formData.paciente_id && (
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    {(() => {
+                      const paciente = pacientes.find(p => p.id === formData.paciente_id);
+                      return (
+                        <div>
+                          <h4 className="font-medium text-green-800 mb-2">
+                            📋 {paciente?.nombre_apellido}
+                          </h4>
+                          <div className="text-sm text-green-700">
+                            <span>Precio por sesión: </span>
+                            <span className="font-bold">
+                              ${paciente?.precio_por_hora.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {['Transferencia', 'Efectivo'].map(metodo => (
+                      <button
+                        key={metodo}
+                        onClick={() => handleInputChange('metodo', metodo)}
+                        className={`p-4 rounded-xl border-2 font-medium transition-all ${
+                          formData.metodo === metodo
+                            ? 'border-green-500 bg-green-50 text-green-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {metodo}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Monto en Pesos</label>
+                  <input
+                    type="number"
+                    value={formData.monto_ars}
+                    onChange={(e) => handleInputChange('monto_ars', e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 text-lg ${
+                      errors.monto_ars ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="15000"
+                  />
+                  {formData.monto_ars && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Equivale a ${(formData.monto_ars / tipoCambio).toFixed(0)} USD
+                    </p>
+                  )}
+                  {errors.monto_ars && (
+                    <p className="text-red-500 text-sm mt-1">{errors.monto_ars}</p>
+                  )}
+                </div>
+
+                {/* Total visual */}
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <div className="text-center">
+                    <div className="text-sm text-green-700 mb-1">Total del pago</div>
+                    <div className="text-2xl font-bold text-green-800">
+                      ${(formData.monto_ars || 0).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* STEP 3: Comprobante y Facturación */}
+            {currentStep === 3 && (
+              <div className="space-y-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Documentación</h3>
+
+                {/* Comprobante */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">¿Tiene comprobante?</label>
+                    <div className="flex items-center gap-4">
+                      {formData.comprobante_url ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-600 text-sm">✓ Subido</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, comprobante_url: '' }))}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2">
+                          <Upload size={16} />
+                          {uploading ? 'Subiendo...' : 'Subir'}
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={(e) => e.target.files[0] && uploadFile(e.target.files[0])}
+                            className="hidden"
+                            disabled={uploading}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Facturación */}
+                <div className="space-y-4">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="facturado"
+                      checked={formData.facturado}
+                      onChange={(e) => handleInputChange('facturado', e.target.checked)}
+                      className="mr-3 w-4 h-4"
+                    />
+                    <label htmlFor="facturado" className="text-sm font-medium text-gray-700">
+                      ¿Necesita factura?
+                    </label>
+                  </div>
+
+                  {formData.facturado && (
+                    <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Factura a nombre de</label>
+                        <input
+                          type="text"
+                          value={formData.factura_a_nombre}
+                          onChange={(e) => handleInputChange('factura_a_nombre', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          placeholder="Nombre del tutor"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">CUIL</label>
+                        <input
+                          type="text"
+                          value={formData.factura_cuil}
+                          onChange={(e) => handleInputChange('factura_cuil', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          placeholder="20-12345678-9"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Footer buttons */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4">
+        {/* Footer fijo */}
+        <div className="flex-shrink-0 bg-white border-t border-gray-200 p-4">
           <div className="flex gap-3">
             {currentStep > 1 && (
               <button
