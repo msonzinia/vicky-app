@@ -1048,3 +1048,40 @@ select:focus {
     padding: 1px 2px;
   }
 }
+
+/* ============================================================================
+   🔧 FIX PARA MODAL - Desactivar hover effects PERO permitir clicks
+   ============================================================================ */
+
+/* Cuando el modal está abierto, desactivar solo los hover effects del fondo */
+body.modal-open .hover-lift:hover {
+  transform: none !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+body.modal-open .card:hover {
+  transform: none !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+body.modal-open .calendar-day-improved:hover {
+  background: inherit !important;
+  transform: none !important;
+}
+
+body.modal-open .session-item:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Desactivar animaciones de fondo cuando modal está abierto */
+body.modal-open .session-item.pending {
+  animation: none !important;
+}
+
+body.modal-open .calendar-day-improved.has-pending {
+  animation: none !important;
+}
+
+/* 🚀 ARREGLADO: NO bloquear pointer-events, solo desactivar hover effects */
+/* Eliminamos las reglas que bloqueaban pointer-events completamente */

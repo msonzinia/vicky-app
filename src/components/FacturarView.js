@@ -52,7 +52,7 @@ const FacturarView = ({
       logica: diaDelMes <= 9 ? 'Mostrar mes anterior' : 'Mostrar mes actual'
     });
 
-    if (diaDelMes <= 9) {
+    if (diaDelMes <= 15) {
       const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
       console.log('📅 Seleccionando mes anterior:', mesAnterior.toISOString().split('T')[0]);
       setMesSeleccionado(mesAnterior);

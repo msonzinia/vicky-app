@@ -18,14 +18,18 @@ export const useIsMobile = () => {
   return isMobile;
 };
 
-// 🚀 Header Mobile con logo jel3.png y visibilidad de montos
+// 🚀 Header Mobile con logo jel3.png y visibilidad de montos CONTEXTUAL
 export const MobileHeader = ({
   onToggleSidebar,
   gananciaNeta,
   sesionsPendientes,
   formatCurrency,
   onCategorizarSesiones,
-  onNuevaSesion
+  onNuevaSesion,
+  // 🚀 NUEVO: Props contextuales
+  context = 'calendario', // 'calendario', 'entradas', 'salidas'
+  onNuevaEntrada,
+  onNuevaSalida
 }) => {
   // Estados para visibilidad de montos
   const [isVisible, setIsVisible] = useState(true);
@@ -68,9 +72,58 @@ export const MobileHeader = ({
     }
   };
 
+  // 🚀 NUEVA: Función contextual para el botón +
+  const handleContextualAction = () => {
+    switch (context) {
+      case 'entradas':
+        if (onNuevaEntrada) {
+          onNuevaEntrada();
+        }
+        break;
+      case 'salidas':
+        if (onNuevaSalida) {
+          onNuevaSalida();
+        }
+        break;
+      case 'calendario':
+      default:
+        if (onNuevaSesion) {
+          onNuevaSesion();
+        }
+        break;
+    }
+  };
+
+  // 🚀 NUEVA: Configuración contextual del botón +
+  const getButtonConfig = () => {
+    switch (context) {
+      case 'entradas':
+        return {
+          color: 'bg-green-500 hover:bg-green-600',
+          title: 'Agregar nueva entrada',
+          icon: <Plus size={20} />
+        };
+      case 'salidas':
+        return {
+          color: 'bg-red-500 hover:bg-red-600',
+          title: 'Agregar nueva salida',
+          icon: <Plus size={20} />
+        };
+      case 'calendario':
+      default:
+        return {
+          color: 'bg-blue-500 hover:bg-blue-600',
+          title: 'Agregar nueva sesión',
+          icon: <Plus size={20} />
+        };
+    }
+  };
+
   // Obtener el mes actual
   const mesActual = new Date().toLocaleDateString('es-AR', { month: 'long' });
   const mesCapitalizado = mesActual.charAt(0).toUpperCase() + mesActual.slice(1);
+
+  const buttonConfig = getButtonConfig();
 
   return (
     <div className="lg:hidden bg-gradient-to-r from-purple-600 to-purple-800 text-white p-4 sticky top-0 z-50">
@@ -121,13 +174,13 @@ export const MobileHeader = ({
           </div>
         </div>
 
-        {/* Botón para agregar nueva sesión */}
+        {/* 🚀 BOTÓN CONTEXTUAL para agregar */}
         <button
-          onClick={onNuevaSesion}
-          className="p-3 rounded-lg bg-green-500 hover:bg-green-600 transition-colors shadow-lg"
-          title="Agregar nueva sesión"
+          onClick={handleContextualAction}
+          className={`p-3 rounded-lg ${buttonConfig.color} transition-colors shadow-lg`}
+          title={buttonConfig.title}
         >
-          <Plus size={20} />
+          {buttonConfig.icon}
         </button>
       </div>
     </div>

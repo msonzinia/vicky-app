@@ -25,6 +25,8 @@ import { useIsMobile, MobileHeader, CalendarioMobile, SidebarOverlay } from './c
 import { EntradasMobile, SalidasMobile, DashboardMobile } from './components/MobileViews';
 import BottomNavigation from './components/BottomNavigation';
 import MobileModal from './components/MobileModal';
+import MobileModalEntrada from './components/MobileModalEntrada';
+import MobileModalSalida from './components/MobileModalSalida';
 // ============================================================================
 // 🚀 FUNCIONES JS QUE REEMPLAZAN LAS FUNCIONES DE SUPABASE
 // ============================================================================
@@ -558,6 +560,9 @@ function App() {
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState(Date.now());
   const [mobileModalOpen, setMobileModalOpen] = useState(false);
   const [fechaDelCalendario, setFechaDelCalendario] = useState(new Date().toISOString().slice(0, 16));
+  // 🚀 NUEVO: Estados para modales mobile específicos
+  const [mobileModalEntradaOpen, setMobileModalEntradaOpen] = useState(false);
+  const [mobileModalSalidaOpen, setMobileModalSalidaOpen] = useState(false);
 
   const isMobile = useIsMobile();
 
@@ -1583,6 +1588,56 @@ function App() {
         s.id === selectedItem.id ? { ...s, ...formData } : s
       ));
 
+    } else if (modalType === 'add-entrada') {
+      const entradaData = {
+        fecha: formData.fecha,
+        paciente_id: formData.paciente_id,
+        metodo: formData.metodo,
+        monto_ars: parseFloat(formData.monto_ars),
+        tipo_cambio: formData.tipo_cambio || tipoCambio,
+        comprobante_url: formData.comprobante_url || null,
+        facturado: formData.facturado || false,
+        factura_url: formData.factura_url || null,
+        factura_a_nombre: formData.factura_a_nombre || null,
+        factura_cuil: formData.factura_cuil || null,
+        facturador: formData.facturador || null
+      };
+
+      const { error } = await supabase
+        .from('pagos_recibidos')
+        .insert([entradaData]);
+
+      if (error) throw error;
+
+      if (window.showToast) {
+        window.showToast('Entrada registrada exitosamente', 'success');
+      }
+
+    // 🚀 NUEVO: Handler para salidas desde desktop
+    } else if (modalType === 'add-salida') {
+      const salidaData = {
+        fecha: formData.fecha,
+        concepto: formData.concepto,
+        destinatario: formData.destinatario,
+        supervisora_id: formData.supervisora_id || null,
+        metodo: formData.metodo,
+        monto_ars: parseFloat(formData.monto_ars),
+        tipo_cambio: formData.tipo_cambio || tipoCambio,
+        comprobante_url: formData.comprobante_url || null,
+        facturado: formData.facturado || false,
+        factura_url: formData.factura_url || null
+      };
+
+      const { error } = await supabase
+        .from('pagos_hechos')
+        .insert([salidaData]);
+
+      if (error) throw error;
+
+      if (window.showToast) {
+        window.showToast('Salida registrada exitosamente', 'success');
+      }
+
     } else if (modalType === 'add-sesion') {
       console.log('=== CREANDO NUEVA SESIÓN ===');
       console.log('FormData recibido:', formData);
@@ -1774,9 +1829,90 @@ function App() {
     setMobileModalOpen(true);
   };
 
+  // 🚀 NUEVO: Handlers para modales mobile de entradas y salidas
+  const handleNuevaEntradaMobile = () => {
+    console.log('🔍 Abriendo modal entrada mobile');
+    setMobileModalEntradaOpen(true);
+  };
+
+  const handleNuevaSalidaMobile = () => {
+    console.log('🔍 Abriendo modal salida mobile');
+    setMobileModalSalidaOpen(true);
+  };
+
   const handleMobileSave = async (formData) => {
     await handleModalSave(formData);
     setMobileModalOpen(false);
+  };
+
+  // 🚀 NUEVO: Handlers para guardar desde modales mobile
+  const handleMobileEntradaSave = async (formData) => {
+    try {
+      const entradaData = {
+        fecha: formData.fecha,
+        paciente_id: formData.paciente_id,
+        metodo: formData.metodo,
+        monto_ars: parseFloat(formData.monto_ars),
+        tipo_cambio: formData.tipo_cambio || tipoCambio,
+        comprobante_url: formData.comprobante_url || null,
+        facturado: formData.facturado || false,
+        factura_url: formData.factura_url || null,
+        factura_a_nombre: formData.factura_a_nombre || null,
+        factura_cuil: formData.factura_cuil || null,
+        facturador: formData.facturador || null
+      };
+
+      const { error } = await supabase
+        .from('pagos_recibidos')
+        .insert([entradaData]);
+
+      if (error) throw error;
+
+      if (window.showToast) {
+        window.showToast('Entrada registrada exitosamente', 'success');
+      }
+
+      setMobileModalEntradaOpen(false);
+    } catch (error) {
+      console.error('Error guardando entrada mobile:', error);
+      if (window.showToast) {
+        window.showToast('Error al guardar entrada: ' + error.message, 'error');
+      }
+    }
+  };
+
+  const handleMobileSalidaSave = async (formData) => {
+    try {
+      const salidaData = {
+        fecha: formData.fecha,
+        concepto: formData.concepto,
+        destinatario: formData.destinatario,
+        supervisora_id: formData.supervisora_id || null,
+        metodo: formData.metodo,
+        monto_ars: parseFloat(formData.monto_ars),
+        tipo_cambio: formData.tipo_cambio || tipoCambio,
+        comprobante_url: formData.comprobante_url || null,
+        facturado: formData.facturado || false,
+        factura_url: formData.factura_url || null
+      };
+
+      const { error } = await supabase
+        .from('pagos_hechos')
+        .insert([salidaData]);
+
+      if (error) throw error;
+
+      if (window.showToast) {
+        window.showToast('Salida registrada exitosamente', 'success');
+      }
+
+      setMobileModalSalidaOpen(false);
+    } catch (error) {
+      console.error('Error guardando salida mobile:', error);
+      if (window.showToast) {
+        window.showToast('Error al guardar salida: ' + error.message, 'error');
+      }
+    }
   };
 
 
@@ -2048,7 +2184,7 @@ function App() {
       />
 
       <div className="main-content-adjusted flex-1 flex flex-col min-h-screen">
-        {/* 🚀 Header mobile */}
+        {/* 🚀 Header mobile CON CONTEXTO */}
         {isMobile && (
           <MobileHeader
             onToggleSidebar={() => setSidebarMobileOpen(!sidebarMobileOpen)}
@@ -2056,7 +2192,11 @@ function App() {
             sesionsPendientes={sesionsPendientes}
             formatCurrency={formatCurrency}
             onCategorizarSesiones={() => openModal('categorizar-sesiones')}
-            onNuevaSesion={handleNuevaSesionMobile}  // ← NUEVA línea
+            onNuevaSesion={handleNuevaSesionMobile}
+            // 🚀 NUEVO: Pasar contexto y handlers específicos
+            context={activeView}
+            onNuevaEntrada={handleNuevaEntradaMobile}
+            onNuevaSalida={handleNuevaSalidaMobile}
           />
         )}
 
@@ -2145,6 +2285,7 @@ function App() {
       />
 
       <ToastSystem />
+      
       {/* Bottom Navigation para mobile */}
       {isMobile && (
         <BottomNavigation
@@ -2164,19 +2305,25 @@ function App() {
         fechaPrecargada={fechaDelCalendario}
       />
 
-      <ToastSystem />
-
-
-
-      {/* 🚀 NUEVO: Modal Mobile para agregar sesiones */}
-      <MobileModal
-        isOpen={mobileModalOpen}
-        onClose={() => setMobileModalOpen(false)}
+      {/* 🚀 NUEVO: Modales Mobile para entradas y salidas */}
+      <MobileModalEntrada
+        isOpen={mobileModalEntradaOpen}
+        onClose={() => setMobileModalEntradaOpen(false)}
         pacientes={pacientes}
-        supervisoras={supervisoras}
-        onSave={handleMobileSave}
-        fechaPrecargada={fechaPrecargada}
+        onSave={handleMobileEntradaSave}
+        tipoCambio={tipoCambio}
       />
+
+      <MobileModalSalida
+        isOpen={mobileModalSalidaOpen}
+        onClose={() => setMobileModalSalidaOpen(false)}
+        supervisoras={supervisoras}
+        alquilerConfig={alquilerConfig}
+        onSave={handleMobileSalidaSave}
+        tipoCambio={tipoCambio}
+      />
+
+      <ToastSystem />
     </div>
   );
 };
